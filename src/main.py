@@ -12,6 +12,11 @@ from fastrtc import Stream, get_stt_model, get_tts_model, ReplyOnPause
 from langchain_groq import ChatGroq
 from langchain.agents import create_agent
 from langgraph.checkpoint.memory import InMemorySaver
+import warnings
+
+# Suppress annoying Pydantic warnings from Superlinked/Site Packages
+warnings.filterwarnings("ignore", category=UserWarning, module="pydantic_settings")
+
 
 # 1. IMPORT YOUR COMPARTMENTS
 # This pulls in the Superlinked search tool

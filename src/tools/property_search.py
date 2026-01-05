@@ -40,22 +40,28 @@ def init_superlinked():
     model="llama-3.3-70b-versatile",
     base_url="https://api.groq.com/openai/v1"
 )
-    # Python 3.14 optimized executor
-    source = sl.InMemorySource(property_schema, parser=sl.DataFrameParser(schema=property_schema))
-    executor = sl.InMemoryExecutor(sources=[source], indices=[property_index])
-    superlinked_app = executor.run()
+    try:
+        # Python 3.14 optimized executor
+        source = sl.InMemorySource(property_schema, parser=sl.DataFrameParser(schema=property_schema))
+        executor = sl.InMemoryExecutor(sources=[source], indices=[property_index])
+        superlinked_app = executor.run()
 
-    # Dynamic Pathing for your project structure
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    csv_path = os.path.normpath(os.path.join(current_dir, "..", "..", "data", "properties.csv"))
+        # Dynamic Pathing for your project structure
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        csv_path = os.path.normpath(os.path.join(current_dir, "..", "..", "data", "properties.csv"))
 
-    if os.path.exists(csv_path):
-        df = pd.read_csv(csv_path)
-        df['id'] = df['id'].astype(str)
-        source.put([df])
-        print("✅ SUCCESS: Sarah's 3.14 engine is live.")
-    else:
-        print(f"❌ ERROR: CSV not found at {csv_path}")
+        if os.path.exists(csv_path):
+            df = pd.read_csv(csv_path)
+            df['id'] = df['id'].astype(str)
+            source.put([df])
+            print("✅ SUCCESS: Sarah's 3.14 engine is live.")
+        else:
+            print(f"❌ ERROR: CSV not found at {csv_path}")
+            
+    except Exception as e:
+        print(f"❌ CRITICAL ERROR in init_superlinked: {e}")
+        import traceback
+        traceback.print_exc()
 
 @tool
 def search_properties(user_request: str):
@@ -71,11 +77,21 @@ def search_properties(user_request: str):
         .limit(1)
     )
     
-    results = superlinked_app.query(query, n_query=user_request)
-    pdf = sl.PandasConverter.to_pandas(results)
-    
-    if pdf.empty:
-        return "I'm sorry, I couldn't find any properties matching that."
-    
-    res = pdf.iloc[0]
-    return f"I found a property in {res['location']} for {res['price']} euros. It has {res['rooms']} rooms."
+    try:
+        results = superlinked_app.query(query, n_query=user_request)
+        pdf = sl.PandasConverter.to_pandas(results)
+        # Write columns to a file to be sure
+        with open("columns.txt", "w") as f:
+            f.write(str(list(pdf.columns)))
+
+        print(f"DEBUG: Dataframe columns: {list(pdf.columns)}")
+        
+        if pdf.empty:
+            return "I'm sorry, I couldn't find any properties matching that."
+        
+        res = pdf.iloc[0]
+        return f"I found a property in {match_details['location']} for {match_details['price']} euros. It has {match_details['rooms']} rooms."
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return f"An error occurred while searching: {e}"
