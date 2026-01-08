@@ -1,1 +1,2 @@
-['id', 'similarity_score']
+id
+similarity_score
