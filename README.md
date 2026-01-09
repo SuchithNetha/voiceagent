@@ -5,7 +5,7 @@ A voice-enabled AI agent that can chat about Madrid real estate properties. Buil
 ## ⚠️ Requirements
 
 *   **Python 3.10, 3.11, or 3.12** (Python 3.13 is NOT supported by Superlinked yet)
-*   **Groq API Key**
+*   **Grok API Key**
 
 ## 🚀 Setup
 
