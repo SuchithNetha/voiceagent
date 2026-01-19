@@ -10,7 +10,6 @@ This module provides:
 
 Usage:
     from src.utils.logger import setup_logging
-    
     logger = setup_logging("Sarah-Main")
     logger.info("Application started")
     logger.error("Something failed", exc_info=True)

@@ -16,19 +16,22 @@ import asyncio
 import uuid
 import re
 import warnings
+import argparse
+import threading
+import time
 from pathlib import Path
 from typing import AsyncGenerator, Tuple, Optional
 
 import numpy as np
 import gradio as gr
 from dotenv import load_dotenv
-from fastrtc import Stream, get_stt_model, get_tts_model, ReplyOnPause
-from langchain_groq import ChatGroq
-from langchain.agents import create_agent
+from fastrtc import Stream, ReplyOnPause
 from langgraph.checkpoint.memory import InMemorySaver
 
 # Ensure the root directory is in python path
-sys.path.append(str(Path(__file__).parent.parent))
+ROOT_DIR = Path(__file__).resolve().parent.parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
 from src.config import config
 from src.utils.logger import setup_logging, get_logger_with_context
@@ -40,6 +43,8 @@ from src.utils.exceptions import (
     ToolExecutionError,
 )
 from src.tools.property_search import search_properties, initialize_search_engine
+from src.models import load_stt_model, load_tts_model, get_llm, create_sarah_agent
+from src.telephony import create_telephony_app
 
 
 # --- INITIALIZATION ---
@@ -96,21 +101,17 @@ class SarahAgent:
             return False
         
         # 2. Load STT model
-        logger.info("🎤 Loading Speech-to-Text model (Whisper)...")
         try:
-            self.stt_model = get_stt_model()
-            logger.info("✅ STT model loaded")
+            self.stt_model = load_stt_model()
         except Exception as e:
-            logger.critical(f"❌ Failed to load STT model: {e}", exc_info=True)
+            # Logger already handled in load_stt_model
             return False
         
         # 3. Load TTS model
-        logger.info("🔊 Loading Text-to-Speech model (Kokoro)...")
         try:
-            self.tts_model = get_tts_model()
-            logger.info("✅ TTS model loaded")
+            self.tts_model = load_tts_model()
         except Exception as e:
-            logger.critical(f"❌ Failed to load TTS model: {e}", exc_info=True)
+            # Logger already handled in load_tts_model
             return False
         
         # 4. Initialize search engine
@@ -119,37 +120,15 @@ class SarahAgent:
             logger.warning("⚠️ Search engine initialization failed - will retry on first search")
         
         # 5. Set up LLM and agent
-        logger.info("🧠 Setting up AI agent...")
         try:
-            llm = ChatGroq(
-                model="llama-3.3-70b-versatile",
-                api_key=config.GROQ_API_KEY,
-                temperature=0,
-                max_retries=2,
+            llm = get_llm()
+            self.agent = create_sarah_agent(
+                llm, 
+                tools=[search_properties], 
+                checkpointer=self._session_checkpointer
             )
-            
-            system_prompt = (
-                "You are Sarah, a warm and friendly real estate agent based in Madrid. "
-                "You help people find their perfect property with enthusiasm and expertise.\n\n"
-                "Guidelines:\n"
-                "- When searching for properties, start with a natural filler like "
-                "'Let me check that for you!' or 'Great question, looking that up now.'\n"
-                "- NEVER speak function names, JSON, or technical terms.\n"
-                "- Keep responses conversational and concise (2-3 sentences max for voice).\n"
-                "- If a search returns no results, suggest alternatives.\n"
-                "- Always be helpful and positive!"
-            )
-            
-            self.agent = create_agent(
-                llm,
-                tools=[search_properties],
-                checkpointer=self._session_checkpointer,
-                system_prompt=system_prompt
-            )
-            logger.info("✅ Agent configured")
-            
         except Exception as e:
-            logger.critical(f"❌ Failed to set up agent: {e}", exc_info=True)
+            # Logger handled in model modules
             return False
         
         self.is_ready = True
@@ -182,50 +161,52 @@ class SarahAgent:
         request_logger
     ) -> str:
         """
-        Get a response from the agent, handling tool calls if needed.
+        Get a response from the agent, handling tool calls automatically in a loop.
         """
         try:
-            # Initial agent invocation
-            result = await self.agent.ainvoke(
-                {"messages": [("user", user_text)]},
-                {"configurable": {"thread_id": session_id}}
-            )
+            # We use a loop here because the agent might want to use a tool,
+            # then think again before giving a final answer.
+            messages = [("user", user_text)]
+            max_iterations = 5  # Prevent infinite loops
             
-            last_msg = result["messages"][-1]
-            
-            # Check if agent wants to use a tool
-            if hasattr(last_msg, "tool_calls") and last_msg.tool_calls:
-                tool_call = last_msg.tool_calls[0]
-                tool_name = tool_call['name']
-                tool_args = tool_call['args']
-                
-                request_logger.info(f"🔧 Tool call: {tool_name}({tool_args})")
-                
-                # Execute the tool
-                if tool_name == 'search_properties':
-                    query = tool_args.get("user_request", "")
-                    tool_result = await search_properties(query)
-                else:
-                    tool_result = f"Unknown tool: {tool_name}"
-                    request_logger.warning(f"Unknown tool requested: {tool_name}")
-                
-                # Get final response with tool result
-                final_response = await self.agent.ainvoke(
-                    {
-                        "messages": [
-                            last_msg,
-                            {
-                                "role": "tool",
-                                "content": str(tool_result),
-                                "tool_call_id": tool_call['id']
-                            }
-                        ]
-                    },
+            for i in range(max_iterations):
+                # 1. Ask the agent for a response
+                result = await self.agent.ainvoke(
+                    {"messages": messages},
                     {"configurable": {"thread_id": session_id}}
                 )
-                return final_response["messages"][-1].content
-            else:
+                
+                last_msg = result["messages"][-1]
+                messages.append(last_msg)
+                
+                # 2. Check if agent wants to use a tool
+                if hasattr(last_msg, "tool_calls") and last_msg.tool_calls:
+                    tool_call = last_msg.tool_calls[0]
+                    tool_name = tool_call['name']
+                    tool_args = tool_call['args']
+                    
+                    request_logger.info(f"🔧 Iteration {i+1}: Agent calling tool {tool_name}")
+                    
+                    # Execute the tool
+                    if tool_name == 'search_properties':
+                        query = tool_args.get("user_request", "")
+                        tool_result = await search_properties(query)
+                    else:
+                        tool_result = f"Unknown tool: {tool_name}"
+                        request_logger.warning(f"Unknown tool requested: {tool_name}")
+                    
+                    # Add the tool result to messages and loop back to the agent
+                    messages.append({
+                        "role": "tool",
+                        "content": str(tool_result),
+                        "tool_call_id": tool_call['id']
+                    })
+                    continue  # Tool used, ask the agent to think again
+                
+                # 3. If no tool call, this is the final answer
                 return last_msg.content
+                
+            return "I'm having trouble finishing my thought. Could you try asking simpler?"
                 
         except Exception as e:
             logger.error(f"Agent error: {e}", exc_info=True)
@@ -333,6 +314,10 @@ class SarahAgent:
 # --- APPLICATION ENTRY POINT ---
 def main():
     """Main entry point for the application."""
+    parser = argparse.ArgumentParser(description="Sarah Voice Agent")
+    parser.add_argument("--phone", action="store_true", help="Start the Twilio telephony server")
+    parser.add_argument("--call", type=str, help="Make an outbound call to this number (Format: +123456789)")
+    args = parser.parse_args()
     
     # Create and initialize the agent
     sarah = SarahAgent()
@@ -341,18 +326,73 @@ def main():
         logger.critical("❌ Failed to initialize Sarah. Exiting.")
         sys.exit(1)
     
-    # Create the FastRTC stream
-    stream = Stream(
-        handler=ReplyOnPause(sarah.handle_voice_input),
-        modality="audio",
-        mode="send-receive"
-    )
-    
-    # Launch the web UI
-    logger.info("🌐 Launching web interface...")
-    logger.info("💡 Open the URL shown below to talk to Sarah!")
-    stream.ui.launch()
+    if args.call:
+        # 1. Start the Telephony Server in the background
+        import uvicorn
+        from src.config import get_config
+        from src.telephony import create_telephony_app, make_outbound_call
+        
+        app_config = get_config()
+        app = create_telephony_app(sarah)
+        
+        # Function to run the server
+        def run_server():
+            logger.info(f"📞 Starting Background Phone Server on {app_config.HOST}:{app_config.PORT}")
+            uvicorn.run(app, host=app_config.HOST, port=app_config.PORT, log_level="error")
+
+        server_thread = threading.Thread(target=run_server, daemon=True)
+        server_thread.start()
+        
+        # 2. Wait a moment for server to warm up
+        logger.info("⏳ Waiting for server to stabilize...")
+        time.sleep(3)
+        
+        # 3. Trigger the outbound call
+        success = make_outbound_call(args.call)
+        if success:
+            print(f"✅ Sarah is now dialing {args.call}...")
+            print("🎙️ Keep this window open while you talk!")
+            # Keep the main thread alive while the call happens
+            try:
+                while True:
+                    time.sleep(1)
+            except KeyboardInterrupt:
+                print("\n🛑 Stopping Sarah...")
+        else:
+            print(f"❌ Failed to initiate call to {args.call}. Check logs/sarah.log for details.")
+        sys.exit(0)
+        
+    if args.phone:
+        # Start the Telephony Server (Twilio)
+        import uvicorn
+        from src.config import get_config
+        app_config = get_config()
+        
+        app = create_telephony_app(sarah)
+        logger.info(f"📞 Starting Phone Server on {app_config.HOST}:{app_config.PORT}")
+        logger.info(f"🔗 Make sure Twilio points to: {app_config.SERVER_URL}/voice")
+        uvicorn.run(app, host=app_config.HOST, port=app_config.PORT)
+    else:
+        # Start the FastRTC Web UI (Default)
+        from fastrtc import Stream, ReplyOnPause
+        stream = Stream(
+            handler=ReplyOnPause(sarah.handle_voice_input),
+            modality="audio",
+            mode="send-receive"
+        )
+        
+        logger.info("🌐 Launching web interface...")
+        logger.info("💡 Open the URL shown below to talk to Sarah!")
+        stream.ui.launch()
 
 
 if __name__ == "__main__":
+    # Option 1: Run with aiomonitor for async debugging (uncomment to use)
+    # import aiomonitor
+    # async def main_with_monitor():
+    #     async with aiomonitor.start_monitor():
+    #         main()
+    # asyncio.run(main_with_monitor())
+    
+    # Option 2: Normal run (default)
     main()

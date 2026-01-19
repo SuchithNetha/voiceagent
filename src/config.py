@@ -45,7 +45,7 @@ class AppConfig:
     LLM_TEMPERATURE: float = 0.0
     
     # --- Paths ---
-    BASE_DIR: Path = Path(__file__).parent.parent
+    BASE_DIR: Path = Path(__file__).resolve().parent.parent
     DATA_PATH: Path = None  # Set in __post_init__
     AVATAR_DIR: Path = None  # Set in __post_init__
     LOG_DIR: Path = None  # Set in __post_init__
@@ -59,6 +59,12 @@ class AppConfig:
     HOST: str = "127.0.0.1"
     PORT: int = 7860
     DEBUG: bool = False
+    
+    # --- Twilio (Telephony) ---
+    TWILIO_ACCOUNT_SID: Optional[str] = None
+    TWILIO_AUTH_TOKEN: Optional[str] = None
+    TWILIO_PHONE_NUMBER: Optional[str] = None
+    SERVER_URL: str = "http://127.0.0.1:7860"
     
     def __post_init__(self):
         """Set computed paths after initialization."""
@@ -122,6 +128,10 @@ class AppConfig:
             HOST=os.getenv("HOST", "127.0.0.1"),
             PORT=int(os.getenv("PORT", "7860")),
             DEBUG=os.getenv("DEBUG", "false").lower() == "true",
+            TWILIO_ACCOUNT_SID=os.getenv("TWILIO_ACCOUNT_SID"),
+            TWILIO_AUTH_TOKEN=os.getenv("TWILIO_AUTH_TOKEN"),
+            TWILIO_PHONE_NUMBER=os.getenv("TWILIO_PHONE_NUMBER"),
+            SERVER_URL=os.getenv("SERVER_URL", "http://127.0.0.1:7860"),
         )
 
 
