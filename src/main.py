@@ -574,10 +574,20 @@ async def main_async():
     if args.call:
         # 1. Start the Telephony Server in the background
         import uvicorn
+        import socket
         from src.config import get_config
         from src.telephony import create_telephony_app, make_outbound_call
         
         app_config = get_config()
+
+        # --- PORT GUARD: Check if port 7860 is already busy ---
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            if s.connect_ex(('127.0.0.1', app_config.PORT)) == 0:
+                logger.critical(f"❌ PORT CONFLICT: Port {app_config.PORT} is already busy!")
+                logger.critical(f"👉 TIP: You probably have another version of Sarah running in another terminal.")
+                logger.critical(f"👉 FIX: Close all other terminals or press Ctrl+C in them, then try again.")
+                sys.exit(1)
+
         app = create_telephony_app(sarah)
         
         config_uv = uvicorn.Config(app, host=app_config.HOST, port=app_config.PORT, log_level="error")

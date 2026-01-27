@@ -32,8 +32,44 @@ from src.dashboard_utils import get_recent_logs, get_current_config_map, update_
 logger = setup_logging("Telephony")
 config = get_config()
 
-# Twilio Client for Outbound Calls
+# Twilio Client for Outbound Calls and Webhook Sync
 twilio_client = Client(config.TWILIO_ACCOUNT_SID, config.TWILIO_AUTH_TOKEN) if config.TWILIO_ACCOUNT_SID else None
+
+async def sync_twilio_webhook():
+    """
+    Automatically synchronize the Twilio phone number's Voice URL 
+    to point to the current server's public URL (ngrok/Render).
+    This eliminates the need to manually update the Twilio Console.
+    """
+    if not twilio_client or not config.TWILIO_PHONE_NUMBER:
+        return
+    
+    try:
+        # Find the incoming phone number SID
+        loop = asyncio.get_event_loop()
+        numbers = await loop.run_in_executor(
+            None, 
+            lambda: twilio_client.incoming_phone_numbers.list(phone_number=config.TWILIO_PHONE_NUMBER)
+        )
+        
+        if not numbers:
+            logger.warning(f"⚠️ Could not find Twilio number {config.TWILIO_PHONE_NUMBER} to sync webhook.")
+            return
+
+        number_sid = numbers[0].sid
+        voice_url = f"{config.SERVER_URL}/voice"
+        
+        # Update the Voice URL
+        await loop.run_in_executor(
+            None,
+            lambda: twilio_client.incoming_phone_numbers(number_sid).update(
+                voice_url=voice_url,
+                voice_method="POST"
+            )
+        )
+        logger.info(f"✅ Twilio Webhook synced: {voice_url}")
+    except Exception as e:
+        logger.warning(f"⚠️ Failed to auto-sync Twilio webhook: {e}")
 
 
 def create_telephony_app(agent):
@@ -48,6 +84,9 @@ def create_telephony_app(agent):
         if hasattr(agent, 'initialize_async'):
             logger.info("🚀 Calling agent.initialize_async()...")
             await agent.initialize_async()
+        
+        # Auto-sync Twilio webhook on startup
+        await sync_twilio_webhook()
         yield
         # Shutdown: cleanup
         if hasattr(agent, 'session_manager') and agent.session_manager:
