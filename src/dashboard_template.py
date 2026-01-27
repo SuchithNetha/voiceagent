@@ -402,6 +402,20 @@ DASHBOARD_HTML = """
                 </div>
             </div>
 
+            <!-- New Section: Manual Outbound Call -->
+            <div class="section-title">Initiate Manual Call</div>
+            <div class="card" style="margin-bottom: 2.5rem;">
+                <div class="config-form" style="grid-template-columns: 1fr auto;">
+                    <div class="form-group">
+                        <label>Phone Number (with country code)</label>
+                        <input type="text" id="manual-phone-number" placeholder="+1234567890">
+                    </div>
+                    <div style="display: flex; align-items: flex-end;">
+                        <button type="button" onclick="initiateManualCall()">🚀 Start Outbound Call</button>
+                    </div>
+                </div>
+            </div>
+
             <div class="section-title">Active Conversations</div>
             <div class="card" style="padding: 0; margin-bottom: 2.5rem; overflow: hidden;">
                 <table>
@@ -471,6 +485,35 @@ DASHBOARD_HTML = """
     <div class="toast" id="toast">Config updated successfully</div>
 
     <script>
+        async function initiateManualCall() {
+            const phone = document.getElementById('manual-phone-number').value.trim();
+            if (!phone) {
+                showToast("Please enter a phone number", true);
+                return;
+            }
+
+            document.getElementById('loading').style.display = 'flex';
+            try {
+                const res = await fetch('/dashboard/call', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ phone_number: phone })
+                });
+                const data = await res.json();
+                
+                if (data.status === 'success') {
+                    showToast("Call initiated! Check logs below.");
+                    document.getElementById('manual-phone-number').value = '';
+                } else {
+                    showToast("Failed: " + (data.message || "Unknown error"), true);
+                }
+            } catch (err) {
+                showToast("Network error", true);
+            } finally {
+                document.getElementById('loading').style.display = 'none';
+            }
+        }
+
         async function fetchStatus() {
             try {
                 const res = await fetch('/dashboard/status');

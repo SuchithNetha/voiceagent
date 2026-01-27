@@ -135,6 +135,17 @@ def create_telephony_app(agent):
         success = update_env_file(updates)
         return {"status": "success" if success else "failed"}
 
+    @app.post("/dashboard/call")
+    async def trigger_dashboard_call(data: dict):
+        """Trigger an outbound call from the dashboard."""
+        phone_number = data.get("phone_number")
+        if not phone_number:
+            return {"status": "error", "message": "Phone number required"}
+        
+        logger.info(f"🚀 Dashboard requested outbound call to {phone_number}")
+        success = await make_outbound_call(phone_number)
+        return {"status": "success" if success else "failed"}
+
     @app.post("/voice")
     async def handle_incoming_call(request: Request):
         """
