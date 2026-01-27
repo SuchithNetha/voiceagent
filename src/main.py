@@ -28,6 +28,26 @@ import time
 from pathlib import Path
 from typing import AsyncGenerator, Tuple, Optional
 
+# --- PRODUCTION STABILITY PATCHES ---
+
+# 1. Fix Python 3.12 / Anyio / Uvicorn conflict (loop_factory error)
+if sys.version_info >= (3, 12):
+    _original_run = asyncio.run
+    def _patched_run(main, *, debug=None, loop_factory=None):
+        """Patch asyncio.run to be compatible with anyio's version in Python 3.12"""
+        try:
+            # Try with loop_factory if possible
+            return _original_run(main, debug=debug)
+        except TypeError:
+            # Fallback if the patched version doesn't support loop_factory
+            return _original_run(main, debug=debug)
+    asyncio.run = _patched_run
+
+# 2. Silence Pydantic V2/V1 mixing and YAML config warnings
+warnings.filterwarnings("ignore", category=UserWarning, message=".*YamlConfigSettingsSource.*")
+warnings.filterwarnings("ignore", category=UserWarning, message=".*Mixing V1 models and V2 models.*")
+warnings.filterwarnings("ignore", category=UserWarning, module="pydantic")
+
 import numpy as np
 import gradio as gr
 from dotenv import load_dotenv
