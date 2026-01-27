@@ -32,16 +32,21 @@ from typing import AsyncGenerator, Tuple, Optional
 
 # 1. Fix Python 3.12 / Anyio / Uvicorn conflict (loop_factory error)
 if sys.version_info >= (3, 12):
-    _original_run = asyncio.run
-    def _patched_run(main, *, debug=None, loop_factory=None):
-        """Patch asyncio.run to be compatible with anyio's version in Python 3.12"""
-        try:
-            # Try with loop_factory if possible
+    try:
+        import uvicorn.config
+        # Force uvicorn to ignore loop_factory which crashes in patched anyio environments
+        uvicorn.config.Config.get_loop_factory = lambda self: None
+        
+        # Also try to un-patch asyncio.run if anyio has already touched it
+        import anyio._backends._asyncio
+        if hasattr(anyio._backends._asyncio, "run"):
+             asyncio.run = anyio._backends._asyncio._original_run
+    except Exception:
+        # Fallback to a broader patch if specific imports fail
+        _original_run = asyncio.run
+        def _patched_run(main, *, debug=None, loop_factory=None):
             return _original_run(main, debug=debug)
-        except TypeError:
-            # Fallback if the patched version doesn't support loop_factory
-            return _original_run(main, debug=debug)
-    asyncio.run = _patched_run
+        asyncio.run = _patched_run
 
 # 2. Silence Pydantic V2/V1 mixing and YAML config warnings
 warnings.filterwarnings("ignore", category=UserWarning, message=".*YamlConfigSettingsSource.*")
