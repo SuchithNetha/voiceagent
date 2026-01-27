@@ -365,9 +365,13 @@ DASHBOARD_HTML = """
                 <a href="#" class="nav-link">Memory Viewer</a>
                 <a href="#" class="nav-link">Account Settings</a>
             </nav>
-            <div style="margin-top: auto; border-top: 1px solid #1e293b; padding-top: 1.5rem;">
                 <div style="font-size: 0.75rem; color: var(--text-dim);">Build v2.4.0</div>
                 <div style="font-size: 0.75rem; color: var(--text-dim);">DeepMind Agentic Framework</div>
+            </div>
+
+            <div id="phone-display-sidebar" style="background: #1e293b; padding: 1rem; border-radius: 12px; border: 1px solid rgba(56, 189, 248, 0.2); margin-top: 1rem;">
+                <div style="font-size: 0.7rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.25rem;">Live Agent Number</div>
+                <div id="sarah-phone-number" style="font-family: 'Outfit'; font-weight: 600; font-size: 1.1rem; color: var(--primary);">Loading...</div>
             </div>
         </aside>
 
@@ -580,6 +584,11 @@ DASHBOARD_HTML = """
                 for (const [key, val] of Object.entries(config)) {
                     const el = document.querySelector(`[name="${key}"]`);
                     if (el) el.value = val;
+                }
+                
+                // Update specific UI display elements
+                if (config.TWILIO_PHONE_NUMBER) {
+                    document.getElementById('sarah-phone-number').innerText = config.TWILIO_PHONE_NUMBER;
                 }
             } catch (err) {
                 console.error("Config fetch failed", err);
