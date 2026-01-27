@@ -1,20 +1,15 @@
-﻿# Sarah Voice Agent - Production Dependencies
+﻿# Sarah Voice Agent - Production Dependencies (OOM-Safe for Render Free)
 # 
-# Pin versions to ensure reproducible builds.
-# Update versions periodically with: pip-compile requirements.in
-#
 # Core Framework
-fastrtc>=0.0.1
-fastrtc[stt]
-fastrtc[tts]
-fastrtc[vad]
+fastrtc>=0.0.34
+# No extras [stt, tts] to save 800MB+ of space and 500MB+ of RAM
 
 # AI/ML
 langchain>=0.1.0,<0.3.0
 langchain-groq>=0.1.0
 langgraph>=0.0.1
 
-# Vector Search
+# Vector Search (Note: Superlinked is heavy, using optimized config)
 superlinked>=0.1.0
 
 # Data Processing
@@ -27,9 +22,9 @@ inflect>=7.0.0
 # Environment & Config
 python-dotenv>=1.0.0
 
-# Audio Processing (FastRTC dependencies)
-faster-whisper>=1.0.0
-kokoro-onnx>=0.1.0
+# Audio Processing (API-based replacements for memory safety)
+edge-tts>=6.1.0
+av>=12.0.0  # For decoding Edge-TTS streams
 
 # Web UI
 gradio>=4.0.0
@@ -45,4 +40,4 @@ uvicorn>=0.20.0
 groq>=0.5.0
 
 # WebRTC VAD for intelligent speech detection
-webrtcvad-wheels>=2.0.10  # Pre-built wheel, no C++ compiler needed
+webrtcvad-wheels>=2.0.10
