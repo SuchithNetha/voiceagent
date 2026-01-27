@@ -2,6 +2,7 @@
 TTS (Text-to-Speech) using Sarvam AI for Sarah Voice Agent.
 """
 
+import os
 import io
 import asyncio
 import requests

@@ -3,6 +3,7 @@ STT (Speech-to-Text) using Sarvam AI for Sarah Voice Agent.
 Ultra-fast transcription optimized for phone conversations.
 """
 
+import os
 import io
 import asyncio
 import requests
