@@ -158,7 +158,7 @@ class PropertySearchEngine:
                 
                 # Load property data
                 logger.info(f"📂 Loading properties from: {csv_path}")
-                df = pd.read_csv(csv_path)
+                df = pd.read_csv(csv_path, encoding='utf-8')
                 df['id'] = df['id'].astype(str)
                 source.put([df])
                 

@@ -14,14 +14,17 @@ Production best practices:
 """
 
 import os
+import requests
 from pathlib import Path
 from typing import Optional
 from dataclasses import dataclass
 from dotenv import load_dotenv
 
 
-# Load environment variables from .env file
-load_dotenv()
+# Load environment variables from .env file in the root directory
+ROOT_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(ROOT_DIR / ".env")
+
 
 
 @dataclass
@@ -56,15 +59,39 @@ class AppConfig:
     LOG_JSON_FORMAT: bool = False
     
     # --- Server ---
-    HOST: str = "127.0.0.1"
-    PORT: int = 7860
-    DEBUG: bool = False
+    HOST: str = os.getenv("HOST", "0.0.0.0")  # Bind to all interfaces for Cloud/Docker
+    PORT: int = int(os.getenv("PORT", "7860")) # Cloud platforms provide a dynamic PORT
+    DEBUG: bool = os.getenv("DEBUG", "false").lower() == "true"
     
     # --- Twilio (Telephony) ---
     TWILIO_ACCOUNT_SID: Optional[str] = None
     TWILIO_AUTH_TOKEN: Optional[str] = None
     TWILIO_PHONE_NUMBER: Optional[str] = None
     SERVER_URL: str = "http://127.0.0.1:7860"
+    
+    # --- Audio/VAD Settings ---
+    # Optimized for 8kHz μ-law from Twilio (limited dynamic range)
+    SILENCE_THRESHOLD_MS: int = 600          # Base silence threshold (responsive)
+    SILENCE_THRESHOLD_MIN_MS: int = 400      # Minimum for fast talkers
+    SILENCE_THRESHOLD_MAX_MS: int = 1000     # Maximum for deliberate speech
+    RMS_SILENCE_THRESHOLD: int = 400         # RMS level for silence detection (more sensitive)
+    RMS_BARGE_IN_THRESHOLD: int = 600         # Lowered from 800 for better sensitivity
+    BARGE_IN_CONFIRM_FRAMES: int = 3          # Lowered from 6 (~60ms) for faster response
+    BARGE_IN_GRACE_PERIOD_MS: int = 500       # Lowered from 1500ms to allow quicker interruptions
+    
+    # --- Memory Settings ---
+    MEMORY_MAX_TURNS: int = 5                # Max conversation turns in context
+    MEMORY_SUMMARY_INTERVAL: int = 10        # Turns between auto-summarization
+    MEMORY_PERSISTENCE: bool = False         # Enable file-based storage
+    MEMORY_STORAGE_PATH: Optional[Path] = None
+    
+    # --- Search Settings ---
+    SEARCH_DESCRIPTION_WEIGHT: float = 0.40  # Weight for text similarity
+    SEARCH_CHARM_WEIGHT: float = 0.10        # Weight for charm preference
+    SEARCH_MODERN_WEIGHT: float = 0.10       # Weight for modern preference
+    SEARCH_LUXURY_WEIGHT: float = 0.10       # Weight for luxury preference
+    SEARCH_PRICE_WEIGHT: float = 0.20        # Weight for price preference
+    SEARCH_RESULT_LIMIT: int = 3             # Default number of results
     
     def __post_init__(self):
         """Set computed paths after initialization."""
@@ -74,6 +101,8 @@ class AppConfig:
             self.AVATAR_DIR = self.BASE_DIR / "avatars"
         if self.LOG_DIR is None:
             self.LOG_DIR = self.BASE_DIR / "logs"
+        if self.MEMORY_STORAGE_PATH is None:
+            self.MEMORY_STORAGE_PATH = self.BASE_DIR / "data" / "memory"
     
     def validate(self) -> None:
         """
@@ -103,6 +132,34 @@ class AppConfig:
             for error in errors:
                 logger.critical(f"❌ {error}")
             raise ValueError(f"Configuration errors: {', '.join(errors)}")
+        
+        # Try to auto-detect ngrok URL if we're on localhost
+        if "127.0.0.1" in self.SERVER_URL or "localhost" in self.SERVER_URL:
+            detected_url = self.auto_detect_server_url()
+            if detected_url:
+                from src.utils.logger import setup_logging
+                logger = setup_logging("Config")
+                logger.info(f"🌐 Auto-detected ngrok URL: {detected_url}")
+                self.SERVER_URL = detected_url
+
+    def auto_detect_server_url(self) -> Optional[str]:
+        """
+        Attempt to automatically find the public ngrok URL via its local API.
+        This removes the need to manually update the .env file.
+        """
+        try:
+            # Ngrok's local API usually lives on port 4040
+            response = requests.get("http://127.0.0.1:4040/api/tunnels", timeout=1)
+            if response.status_code == 200:
+                tunnels = response.json().get("tunnels", [])
+                for tunnel in tunnels:
+                    # Look for the https tunnel
+                    if tunnel.get("proto") == "https":
+                        return tunnel.get("public_url")
+        except Exception:
+            # Ngrok probably isn't running or API isn't enabled
+            pass
+        return None
     
     @classmethod
     def from_env(cls) -> "AppConfig":
@@ -125,7 +182,7 @@ class AppConfig:
             LOG_TO_FILE=os.getenv("LOG_TO_FILE", "true").lower() == "true",
             LOG_JSON_FORMAT=os.getenv("LOG_JSON_FORMAT", "false").lower() == "true",
             
-            HOST=os.getenv("HOST", "127.0.0.1"),
+            HOST=os.getenv("HOST", "0.0.0.0"),
             PORT=int(os.getenv("PORT", "7860")),
             DEBUG=os.getenv("DEBUG", "false").lower() == "true",
             TWILIO_ACCOUNT_SID=os.getenv("TWILIO_ACCOUNT_SID"),
