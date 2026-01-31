@@ -140,8 +140,23 @@ PUBLIC_DASHBOARD = """
             <div>
                 <div class="card hero-card">
                     <div class="card-body">
+                        <!-- New: Agent Phone Number Display -->
+                        <div style="background: rgba(129, 140, 248, 0.1); border: 1px solid rgba(129, 140, 248, 0.2); border-radius: 12px; padding: 1rem; margin-bottom: 2rem; display: flex; align-items: center; gap: 1rem;">
+                            <div style="width: 40px; height: 40px; background: rgba(129, 140, 248, 0.2); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.2rem;">
+                                📡
+                            </div>
+                            <div>
+                                <div style="font-size: 0.75rem; color: var(--text-dim); text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em;">Or Call Arya Directly</div>
+                                <div id="agent-number" style="font-size: 1.1rem; font-family: 'Fira Code', monospace; color: var(--primary); font-weight: 600;">Loading...</div>
+                            </div>
+                        </div>
+
                         <h2>📞 Talk to Arya</h2>
                         <p style="margin-bottom: 2rem">Enter your phone number and Arya will call you to help find your dream property in Madrid.</p>
+                        
+                        <p style="color: var(--primary); font-size: 0.9rem; margin-bottom: 1rem; background: rgba(56, 189, 248, 0.1); padding: 0.75rem; border-radius: 8px; border: 1px solid var(--primary-glow);">
+                            <strong>Note:</strong> Please include your country code (e.g., +91, +1) before the number.
+                        </p>
                         
                         <div class="form-group">
                             <label>Your Phone Number</label>
@@ -239,6 +254,11 @@ PUBLIC_DASHBOARD = """
                 return;
             }
             
+            if (!phone.startsWith('+')) {
+                status.innerHTML = '<span style="color: #f87171">⚠️ Please include country code (e.g. +91) starting with +</span>';
+                return;
+            }
+            
             btn.disabled = true;
             btn.innerHTML = '🛰️ Connecting...';
             status.innerHTML = '<span style="color: var(--text-dim)">Initiating call...</span>';
@@ -279,6 +299,11 @@ PUBLIC_DASHBOARD = """
                 const data = await res.json();
                 
                 document.getElementById('active-count').innerText = data.active_calls;
+                if (data.twilio_number) {
+                    document.getElementById('agent-number').innerText = data.twilio_number;
+                } else {
+                    document.getElementById('agent-number').innerText = 'Not Configured';
+                }
                 
                 const liveStatus = document.getElementById('live-status');
                 if (data.active_calls > 0) {

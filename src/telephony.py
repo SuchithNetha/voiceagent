@@ -219,6 +219,7 @@ def create_telephony_app(agent):
         return {
             "active_calls": _active_call_count,
             "agent_ready": agent.is_ready if hasattr(agent, 'is_ready') else False,
+            "twilio_number": config.TWILIO_PHONE_NUMBER,
             "sessions": sessions_list
         }
 
