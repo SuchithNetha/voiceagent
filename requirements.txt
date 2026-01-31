@@ -12,6 +12,7 @@ langgraph>=0.2.0
 
 # Vector Search & Embeddings (Cloud-Powered)
 numpy>=1.26.0
+google-generativeai>=0.8.0
 
 # Text & Audio Processing
 inflect>=7.2.1
