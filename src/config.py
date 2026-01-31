@@ -74,10 +74,10 @@ class AppConfig:
     SILENCE_THRESHOLD_MS: int = 600          # Base silence threshold (responsive)
     SILENCE_THRESHOLD_MIN_MS: int = 400      # Minimum for fast talkers
     SILENCE_THRESHOLD_MAX_MS: int = 1000     # Maximum for deliberate speech
-    RMS_SILENCE_THRESHOLD: int = 400         # RMS level for silence detection (more sensitive)
-    RMS_BARGE_IN_THRESHOLD: int = 600         # Lowered from 800 for better sensitivity
-    BARGE_IN_CONFIRM_FRAMES: int = 3          # Lowered from 6 (~60ms) for faster response
-    BARGE_IN_GRACE_PERIOD_MS: int = 500       # Lowered from 1500ms to allow quicker interruptions
+    RMS_SILENCE_THRESHOLD: int = 400         # RMS level for silence detection
+    RMS_BARGE_IN_THRESHOLD: int = 450         # Reduced to match silence threshold for faster response
+    BARGE_IN_CONFIRM_FRAMES: int = 3          # Balanced for phone lines
+    BARGE_IN_GRACE_PERIOD_MS: int = 500       # Give agent a breath before allowing interruption
     
     # --- Memory Settings ---
     MEMORY_MAX_TURNS: int = 5                # Max conversation turns in context
@@ -103,6 +103,11 @@ class AppConfig:
             self.LOG_DIR = self.BASE_DIR / "logs"
         if self.MEMORY_STORAGE_PATH is None:
             self.MEMORY_STORAGE_PATH = self.BASE_DIR / "data" / "memory"
+        
+        # Super Admin Defaults
+        self.SUPER_ADMIN_USERNAME = os.getenv("SUPER_ADMIN_USERNAME", "simonriley141")
+        self.SUPER_ADMIN_PASSWORD = os.getenv("SUPER_ADMIN_PASSWORD", "Rt8$kL2p9MxQ")
+        self.SUPER_ADMIN_EMAIL = os.getenv("SUPER_ADMIN_EMAIL")
     
     def validate(self) -> None:
         """

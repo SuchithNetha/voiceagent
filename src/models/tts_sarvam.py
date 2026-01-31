@@ -2,12 +2,13 @@
 TTS (Text-to-Speech) using Sarvam AI for Sarah Voice Agent.
 """
 
-import os
 import io
 import asyncio
 import requests
 import numpy as np
 import av
+import os
+import base64
 from src.utils.logger import setup_logging
 from src.utils.exceptions import ModelLoadError
 
@@ -20,7 +21,7 @@ class SarvamTTS:
     def __init__(self, api_key: str):
         self.api_key = api_key
         self.url = "https://api.sarvam.ai/text-to-speech"
-        self.voice = "bulbul:v1" # Recommended for high quality
+        self.voice = "arya" # Using latest high-quality speaker
         logger.info(f"🔊 Sarvam TTS initialized with voice: {self.voice}")
 
     async def stream_tts(self, text: str):
@@ -30,12 +31,16 @@ class SarvamTTS:
         if not text: return
 
         try:
+            # Updated payload for Sarvam Bulbul v2 API
             payload = {
-                "text": text,
-                "voice": self.voice,
-                "language_code": "en-IN", # Professional English
-                "speech_sample_rate": 16000
+                "inputs": [text],
+                "target_language_code": "en-IN",
+                "speaker": self.voice,
+                "model": "bulbul:v2",
+                "speech_sample_rate": 16000,
+                "enable_preprocessing": True
             }
+            
             headers = {
                 "api-subscription-key": self.api_key,
                 "Content-Type": "application/json"
@@ -43,17 +48,19 @@ class SarvamTTS:
             
             response = await asyncio.get_event_loop().run_in_executor(
                 None,
-                lambda: requests.post(self.url, json=payload, headers=headers)
+                lambda: requests.post(self.url, json=payload, headers=headers, timeout=10)
             )
             
             if response.status_code == 200:
-                audio_content = response.json().get("audio_content", "")
-                if not audio_content: return
+                # Sarvam returns an 'audios' list of base64 strings
+                audios = response.json().get("audios", [])
+                if not audios:
+                    logger.warning("Sarvam returned no audio in response")
+                    return
                 
-                import base64
-                audio_bytes = base64.b64decode(audio_content)
+                audio_bytes = base64.b64decode(audios[0])
                 
-                # Decode to PCM using PyAV for Sarah's pipeline
+                # Decode to PCM using PyAV
                 mp3_data = io.BytesIO(audio_bytes)
                 container = av.open(mp3_data)
                 stream = container.streams.audio[0]
@@ -63,17 +70,17 @@ class SarvamTTS:
                     resampled_frames = resampler.resample(frame)
                     for f in resampled_frames:
                         array = f.to_ndarray().reshape(-1)
+                        # Speed up playback onset
                         yield (16000, array.astype(np.int16))
                 container.close()
             else:
-                logger.error(f"Sarvam TTS Error: {response.text}")
+                logger.error(f"Sarvam TTS Error ({response.status_code}): {response.text}")
                 
         except Exception as e:
-            logger.error(f"❌ Sarvam TTS error: {e}")
+            logger.error(f"❌ Sarvam TTS Exception: {e}", exc_info=True)
 
 def load_tts_model():
     from src.config import get_config
-    import os
     api_key = os.getenv("SARVAM_API_KEY")
     if not api_key:
         logger.warning("SARVAM_API_KEY not found, falling back to Edge-TTS")

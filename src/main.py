@@ -1,5 +1,5 @@
 """
-Sarah - Real Estate Voice Agent (Main Entry Point)
+Arya - Real Estate Voice Agent (Main Entry Point)
 
 A voice-enabled AI agent for Madrid real estate using FastRTC, LangGraph, and Superlinked.
 
@@ -54,9 +54,7 @@ warnings.filterwarnings("ignore", category=UserWarning, message=".*Mixing V1 mod
 warnings.filterwarnings("ignore", category=UserWarning, module="pydantic")
 
 import numpy as np
-import gradio as gr
 from dotenv import load_dotenv
-from fastrtc import Stream, ReplyOnPause
 from langgraph.checkpoint.memory import InMemorySaver
 from langchain_core.messages import AIMessage
 
@@ -75,13 +73,13 @@ from src.utils.exceptions import (
     ToolExecutionError,
 )
 from src.utils.retry import async_retry
-# Use enhanced search with weighted descriptors
-from src.tools.property_search import search_properties, initialize_search_engine
-from src.tools.property_search_enhanced import (
-    search_properties_enhanced, 
-    initialize_enhanced_search_engine
+# Use ultra-lightweight Numpy-based search
+from src.tools.property_search_light import (
+    search_properties, 
+    initialize_lightweight_search
 )
-from src.models import load_stt_model, load_tts_model, get_llm, create_sarah_agent
+from src.models import load_stt_model, load_tts_model, get_llm, create_arya_agent
+
 from src.telephony import create_telephony_app
 
 # Memory system for persistent user recognition
@@ -90,15 +88,15 @@ from src.memory.models import SessionMemory, IntentType
 
 
 # --- INITIALIZATION ---
-logger = setup_logging("Sarah-Main")
+logger = setup_logging("Arya-Main")
 
 # Suppress noisy warnings
 warnings.filterwarnings("ignore", category=UserWarning, module="pydantic_settings")
 
 
-class SarahAgent:
+class AryaAgent:
     """
-    Encapsulates the Sarah voice agent with all its components.
+    Encapsulates the Arya voice agent with all its components.
     
     Benefits of using a class:
     - Clean lifecycle management
@@ -138,7 +136,7 @@ class SarahAgent:
         are caught before users interact with the system.
         """
         logger.info("=" * 50)
-        logger.info("🏠 SARAH VOICE AGENT - Starting Up")
+        logger.info("🏠 ARYA VOICE AGENT - Starting Up")
         logger.info("=" * 50)
         
         # 1. Load environment and validate config (this also auto-detects ngrok)
@@ -164,19 +162,15 @@ class SarahAgent:
             # Logger already handled in load_tts_model
             return False
         
-        # 4. Initialize search engine (use enhanced version with weighted descriptors)
-        logger.info("🔍 Pre-loading enhanced search engine...")
-        if not initialize_enhanced_search_engine():
-            logger.warning("⚠️ Enhanced search init failed - falling back to basic")
-            if not initialize_search_engine():
-                logger.warning("⚠️ Basic search init failed - will retry on first search")
+        # 4. Initialize search engine (Numpy - will be fully loaded in initialize_async)
+        logger.info("🏢 Using ultra-lightweight Numpy search engine")
         
-        # 5. Set up LLM and agent (with enhanced search tool)
+        # 5. Set up LLM and agent (with Chroma search tool)
         try:
             self.llm = get_llm()
-            self.agent = create_sarah_agent(
+            self.agent = create_arya_agent(
                 self.llm, 
-                tools=[search_properties_enhanced],  # Use enhanced search!
+                tools=[search_properties], 
                 checkpointer=self._session_checkpointer
             )
         except Exception as e:
@@ -185,7 +179,7 @@ class SarahAgent:
         
         self.is_ready = True
         logger.info("=" * 50)
-        logger.info("✅ SARAH IS READY!")
+        logger.info("✅ ARYA IS READY!")
         logger.info("=" * 50)
         return True
     
@@ -198,6 +192,14 @@ class SarahAgent:
             logger.warning("Cannot init async - sync init not complete")
             return False
         
+        # 1. Initialize Numpy Search (loads data and computes embeddings)
+        logger.info("🚀 Initializing Numpy search and embeddings...")
+        if not await initialize_lightweight_search():
+            logger.error("❌ Numpy search initialization failed")
+            # We continue anyway as it might retry on first search, 
+            # but this is a critical warning.
+        
+        # 2. Initialize Redis/Memory
         if self.use_redis:
             try:
                 logger.info("🔗 Initializing persistent memory (Redis)...")
@@ -460,7 +462,7 @@ class SarahAgent:
         """
         # Use provided session_id (e.g., Twilio Stream SID) or generate a new one
         session_id = session_id or self._generate_session_id()
-        request_logger = get_logger_with_context("Sarah-Handler", request_id=session_id)
+        request_logger = get_logger_with_context("Arya-Handler", request_id=session_id)
         
         if not self.is_ready:
             request_logger.warning("Agent not ready, speaking startup message")
@@ -498,7 +500,7 @@ class SarahAgent:
             clean_response = self._clean_response_for_speech(ai_response)
             
             if clean_response:
-                request_logger.info(f"🎙️ Sarah: {clean_response}")
+                request_logger.info(f"🎙️ Arya: {clean_response}")
                 self._last_responses[session_id] = clean_response
                 
                 # Track assistant turn ONLY if we finish speaking
@@ -529,7 +531,7 @@ class SarahAgent:
                     try:
                         await self.agent.aupdate_state(
                             {"configurable": {"thread_id": session_id}},
-                            {"messages": [AIMessage(content="[System Note: Sarah was interrupted by the user here. The previous message was cut off and the user might not have heard everything.]")]}
+                            {"messages": [AIMessage(content="[System Note: Arya was interrupted by the user here. The previous message was cut off and the user might not have heard everything.]")]}
                         )
                         request_logger.debug("✅ LangGraph memory updated with interruption note")
                     except Exception as e:
@@ -556,16 +558,16 @@ class SarahAgent:
 # --- APPLICATION ENTRY POINT ---
 async def main_async():
     """Async wrapper for the application."""
-    parser = argparse.ArgumentParser(description="Sarah Voice Agent")
+    parser = argparse.ArgumentParser(description="Arya Voice Agent")
     parser.add_argument("--phone", action="store_true", help="Start the Twilio telephony server")
     parser.add_argument("--call", type=str, help="Make an outbound call to this number (Format: +123456789)")
     args = parser.parse_args()
     
     # Create and initialize the agent
-    sarah = SarahAgent()
+    arya = AryaAgent()
     
-    if not sarah.initialize():
-        logger.critical("❌ Failed to initialize Sarah. Exiting.")
+    if not arya.initialize():
+        logger.critical("❌ Failed to initialize Arya. Exiting.")
         sys.exit(1)
         
     # We do NOT call sarah.initialize_async() here because 
@@ -584,11 +586,11 @@ async def main_async():
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             if s.connect_ex(('127.0.0.1', app_config.PORT)) == 0:
                 logger.critical(f"❌ PORT CONFLICT: Port {app_config.PORT} is already busy!")
-                logger.critical(f"👉 TIP: You probably have another version of Sarah running in another terminal.")
+                logger.critical(f"👉 TIP: You probably have another version of Arya running in another terminal.")
                 logger.critical(f"👉 FIX: Close all other terminals or press Ctrl+C in them, then try again.")
                 sys.exit(1)
 
-        app = create_telephony_app(sarah)
+        app = create_telephony_app(arya)
         
         config_uv = uvicorn.Config(app, host=app_config.HOST, port=app_config.PORT, log_level="error")
         server = uvicorn.Server(config_uv)
@@ -608,7 +610,7 @@ async def main_async():
             # make_outbound_call is likely synchronous Twilio SDK call
             success = await make_outbound_call(number)
             if success:
-                print(f"✅ Sarah is now dialing {number}...")
+                print(f"✅ Arya is now dialing {number}...")
             else:
                 print(f"❌ Failed to initiate call to {number}.")
             await asyncio.sleep(1)
@@ -617,7 +619,7 @@ async def main_async():
         try:
             await server_task
         except asyncio.CancelledError:
-            print("\n🛑 Stopping Sarah...")
+            print("\n🛑 Stopping Arya...")
         
     elif args.phone:
         # Start the Telephony Server (Twilio)
@@ -626,24 +628,36 @@ async def main_async():
         from src.telephony import create_telephony_app
         app_config = get_config()
         
-        app = create_telephony_app(sarah)
+        app = create_telephony_app(arya)
+        
+        # Determine loggable URL (convert 0.0.0.0 to clickable localhost)
+        display_host = "127.0.0.1" if app_config.HOST == "0.0.0.0" else app_config.HOST
         logger.info(f"📞 Starting Phone Server on {app_config.HOST}:{app_config.PORT}")
-        logger.info(f"🔗 Make sure Twilio points to: {app_config.SERVER_URL}/voice")
+        logger.info(f"🖥️  Admin Dashboard: http://{display_host}:{app_config.PORT}/admin")
+        logger.info(f"🔗 Twilio Webhook URL: {app_config.SERVER_URL}/voice")
         
         config_uv = uvicorn.Config(app, host=app_config.HOST, port=app_config.PORT)
+
         server = uvicorn.Server(config_uv)
         await server.serve()
     else:
         # Start the FastRTC Web UI (Default)
-        from fastrtc import Stream, ReplyOnPause
+        try:
+            from fastrtc import Stream, ReplyOnPause
+            import gradio as gr
+        except ImportError:
+            logger.error("❌ FastRTC/Gradio not installed. Use --phone mode for Twilio calls.")
+            logger.error("   To enable web mode, run: pip install fastrtc gradio librosa numba")
+            return
+            
         stream = Stream(
-            handler=ReplyOnPause(sarah.handle_voice_input),
+            handler=ReplyOnPause(arya.handle_voice_input),
             modality="audio",
             mode="send-receive"
         )
         
         logger.info("🌐 Launching web interface...")
-        logger.info("💡 Open the URL shown below to talk to Sarah!")
+        logger.info("💡 Open the URL shown below to talk to Arya!")
         
         # Gradio launch is blocking, we run it in a thread or just call it
         # Since this is the end of the entry point, we can just call it

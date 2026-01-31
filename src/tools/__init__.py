@@ -1,36 +1,21 @@
 """
-Sarah Voice Agent Tools Package.
+Arya Voice Agent Tools Package.
 
 Provides LangChain tools for the agent to use:
-- search_properties: Basic semantic search over real estate properties
-- search_properties_enhanced: Advanced search with weighted subjective descriptors
+- search_properties: Lightweight semantic search using Numpy and Gemini Cloud Embeddings.
 """
 
-from src.tools.property_search import (
+from src.tools.property_search_light import (
     search_properties,
-    initialize_search_engine,
-    get_search_engine,
-    PropertySearchEngine,
+    initialize_lightweight_search as initialize_search_engine,
 )
 
-from src.tools.property_search_enhanced import (
-    search_properties_enhanced,
-    initialize_enhanced_search_engine,
-    get_enhanced_search_engine,
-    EnhancedPropertySearchEngine,
-    SearchWeights,
-)
+def get_available_tools():
+    """Return the list of tools available for the agent."""
+    return [search_properties]
 
 __all__ = [
-    # Basic search
     "search_properties",
     "initialize_search_engine",
-    "get_search_engine",
-    "PropertySearchEngine",
-    # Enhanced search
-    "search_properties_enhanced",
-    "initialize_enhanced_search_engine",
-    "get_enhanced_search_engine",
-    "EnhancedPropertySearchEngine",
-    "SearchWeights",
+    "get_available_tools",
 ]

@@ -286,26 +286,30 @@ class SmartBargeInDetector:
         # Analyze audio
         result = self.vad.process_audio(pcm_audio)
         
-        # Update consecutive speech counter
-        # STRICTOR CHECK: Must be both VAD speech AND above RMS energy threshold
+        # 1. SPEECH-BASED BARGE-IN (Conservative)
+        # Must be both VAD speech AND above RMS energy threshold
         if result.is_speech and result.rms_level >= self.vad.rms_threshold:
             self._consecutive_speech += 1
-            
-            if self._consecutive_speech >= self.confirmation_frames:
-                # Barge-in confirmed!
-                import time
-                self._last_trigger_time = time.time()
-                self._is_monitoring = False  # One-shot
-                
-                logger.info(
-                    f"🚨 BARGE-IN detected! "
-                    f"(method={result.method}, RMS={result.rms_level:.0f}, "
-                    f"confidence={result.confidence})"
-                )
-                return True, result
+        # 2. EMERGENCY STOP (Loud sounds)
+        # If sound is very loud, trigger faster even without VAD confirmation
+        elif result.rms_level >= self.vad.rms_threshold * 2:
+            self._consecutive_speech += 1
         else:
-            # Reset counter on non-speech
+            # Reset counter on silence/low noise
             self._consecutive_speech = 0
+
+        if self._consecutive_speech >= self.confirmation_frames:
+            # Barge-in confirmed!
+            self._last_trigger_time = time.time()
+            self._is_monitoring = False  # One-shot
+            
+            trigger_method = "speech" if result.is_speech else "loud_sound"
+            logger.info(
+                f"🚨 BARGE-IN detected! "
+                f"(method={trigger_method}, RMS={result.rms_level:.0f}, "
+                f"confidence={result.confidence})"
+            )
+            return True, result
         
         return False, result
     

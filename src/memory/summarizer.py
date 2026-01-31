@@ -27,7 +27,7 @@ class MemorySummarizer:
     - Outstanding questions/requests
     """
     
-    SUMMARY_PROMPT = """You are summarizing a real estate conversation between a user and Sarah, a real estate agent in Madrid.
+    SUMMARY_PROMPT = """You are summarizing a real estate conversation between a user and Arya, a real estate agent in Madrid.
 
 Create a brief summary (under 80 words) that captures:
 1. User's property preferences (location, price, style)
@@ -176,7 +176,7 @@ JSON:"""
             turns = session.turns[-max_turns:]
         
         for turn in turns:
-            role = "User" if turn.role == "user" else "Sarah"
+            role = "User" if turn.role == "user" else "Arya"
             lines.append(f"{role}: {turn.content}")
         
         return "\n".join(lines)

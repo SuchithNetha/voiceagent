@@ -1,43 +1,36 @@
-﻿# Sarah Voice Agent - Production Dependencies (OOM-Safe for Render Free)
-# 
+﻿# Arya Voice Agent - Production Dependencies (PHONE-MODE)
+# Optimized for Twilio telephony - ~200MB disk footprint
+
 # Core Framework
-fastrtc>=0.0.34
-# No extras [stt, tts] to save 800MB+ of space and 500MB+ of RAM
+fastapi>=0.115.0
+uvicorn>=0.30.0
 
-# AI/ML
-langchain>=0.1.0,<0.3.0
-langchain-groq>=0.1.0
-langgraph>=0.0.1
+# AI/ML (Cloud-based - no heavy local models)
+langchain>=0.3.0
+langchain-groq>=0.2.0
+langgraph>=0.2.0
 
-# Vector Search (Note: Superlinked is heavy, using optimized config)
-superlinked>=0.1.0
+# Vector Search & Embeddings (Cloud-Powered)
+numpy>=1.26.0
 
-# Data Processing
-pandas>=2.0.0
-numpy>=1.24.0
+# Text & Audio Processing
+inflect>=7.2.1
+edge-tts>=6.1.12
+av>=13.0.0
+webrtcvad-wheels>=2.0.11
 
-# Text Processing
-inflect>=7.0.0
+# Security & Authentication
+python-jose[cryptography]>=3.3.0
+bcrypt>=4.0.1
+passlib>=1.7.4
 
-# Environment & Config
-python-dotenv>=1.0.0
-
-# Audio Processing (API-based replacements for memory safety)
-edge-tts>=6.1.0
-av>=12.0.0  # For decoding Edge-TTS streams
-
-# Web UI
-gradio>=4.0.0
 # Persistent Memory Storage
-redis[hiredis]>=5.0.0
+redis[hiredis]>=5.0.8
 
-# Telephony
-twilio>=8.0.0
-fastapi>=0.100.0
-uvicorn>=0.20.0
+# Communication & SDKs
+twilio>=9.3.0
+groq>=0.11.0
+python-dotenv>=1.0.1
 
-# Additional SDKs
-groq>=0.5.0
-
-# WebRTC VAD for intelligent speech detection
-webrtcvad-wheels>=2.0.10
+# Optional: For WebRTC web mode (adds ~500MB)
+# pip install fastrtc gradio librosa numba

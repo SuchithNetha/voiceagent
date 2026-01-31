@@ -1,5 +1,5 @@
 """
-Production-Ready Logging Module for Sarah Voice Agent.
+Production-Ready Logging Module for Arya Voice Agent.
 
 This module provides:
 - Console logging (human-readable)
@@ -10,7 +10,7 @@ This module provides:
 
 Usage:
     from src.utils.logger import setup_logging
-    logger = setup_logging("Sarah-Main")
+    logger = setup_logging("Arya-Main")
     logger.info("Application started")
     logger.error("Something failed", exc_info=True)
 """
@@ -73,7 +73,7 @@ LOG_FORMAT_FILE = "%(asctime)s | %(levelname)-8s | %(name)s | %(module)s:%(linen
 
 # Rotation settings (prevents disk from filling up)
 MAX_LOG_SIZE = 5 * 1024 * 1024  # 5 MB per file
-BACKUP_COUNT = 5  # Keep 5 old log files (sarah.log.1, sarah.log.2, etc.)
+BACKUP_COUNT = 5  # Keep 5 old log files (arya.log.1, arya.log.2, etc.)
 
 
 def setup_logging(name: str, use_json: Optional[bool] = None) -> logging.Logger:
@@ -87,7 +87,7 @@ def setup_logging(name: str, use_json: Optional[bool] = None) -> logging.Logger:
     - Configurable via environment variables
     
     Args:
-        name: The name of the logger (e.g., 'Sarah-Main', 'Sarah-Search')
+        name: The name of the logger (e.g., 'Arya-Main', 'Arya-Search')
         use_json: If True, use JSON format for file logs. 
                   If None, reads from LOG_JSON_FORMAT env var.
         
@@ -100,7 +100,7 @@ def setup_logging(name: str, use_json: Optional[bool] = None) -> logging.Logger:
         LOG_JSON_FORMAT: Use JSON format for file logs ("true" or "false")
         
     Example:
-        logger = setup_logging("Sarah-Main")
+        logger = setup_logging("Arya-Main")
         logger.info("Application started")
         logger.warning("Low memory detected")
         logger.error("Database connection failed", exc_info=True)
@@ -128,7 +128,7 @@ def setup_logging(name: str, use_json: Optional[bool] = None) -> logging.Logger:
             # Create logs directory if it doesn't exist
             LOG_DIR.mkdir(parents=True, exist_ok=True)
             
-            log_file = LOG_DIR / "sarah.log"
+            log_file = LOG_DIR / "arya.log"
             file_handler = RotatingFileHandler(
                 log_file,
                 maxBytes=MAX_LOG_SIZE,
@@ -178,7 +178,7 @@ def get_logger_with_context(
         
     Example:
         # In your request handler:
-        logger = get_logger_with_context("Sarah-Handler", request_id="req-abc-123")
+        logger = get_logger_with_context("Arya-Handler", request_id="req-abc-123")
         logger.info("Processing voice input")  
         # Output: 13:45:00 | INFO | Sarah-Handler | [req-abc-123] Processing voice input
     """

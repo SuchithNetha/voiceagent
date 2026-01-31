@@ -8,8 +8,9 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 
 def get_recent_logs(n: int = 100) -> List[str]:
     """Read the last n lines from the log file."""
-    log_file = ROOT_DIR / "logs" / "sarah.log"
+    log_file = ROOT_DIR / "logs" / "arya.log"
     if not log_file.exists():
+
         return ["Log file not found."]
     
     try:

@@ -36,6 +36,7 @@ from src.memory.models import (
     IntentType
 )
 from src.utils.logger import setup_logging
+from src.utils.auth import hash_password, verify_password
 
 logger = setup_logging("Memory-Redis")
 
@@ -53,7 +54,7 @@ class RedisConfig:
         # Cloud provider URLs (use these for managed Redis)
         url: Optional[str] = None,  # redis://user:password@host:port/db
         # Key prefixes
-        prefix: str = "sarah:",
+        prefix: str = "arya:",
         # TTL settings
         session_ttl_hours: int = 24,       # Session expires after 24 hours
         user_profile_ttl_days: int = 90,   # User profiles expire after 90 days
@@ -360,6 +361,51 @@ class RedisMemoryStore:
         except Exception as e:
             logger.error(f"Failed to load user profile: {e}")
             return None
+            
+    async def list_all_user_profiles(self) -> List[Dict[str, Any]]:
+        """List all user profiles stored in Redis."""
+        if not await self.ensure_connected():
+            return []
+            
+        try:
+            pattern = self._key("user", "*", "profile")
+            keys = await self._client.keys(pattern)
+            
+            profiles = []
+            for key in keys:
+                data = await self._client.get(key)
+                if data:
+                    profiles.append(json.loads(data))
+            
+            # Sort by update time
+            profiles.sort(key=lambda x: x.get("updated_at", ""), reverse=True)
+            return profiles
+        except Exception as e:
+            logger.error(f"Failed to list user profiles: {e}")
+            return []
+
+    async def list_all_sessions(self, limit: int = 50) -> List[Dict[str, Any]]:
+        """List recent sessions across all users."""
+        if not await self.ensure_connected():
+            return []
+            
+        try:
+            pattern = self._key("session", "*")
+            keys = await self._client.keys(pattern)
+            
+            sessions = []
+            # This is expensive for many sessions, but for admin view it's okay with limit
+            for key in keys[:limit]:
+                data = await self._client.get(key)
+                if data:
+                    sessions.append(json.loads(data))
+            
+            # Sort by start time
+            sessions.sort(key=lambda x: x.get("started_at", ""), reverse=True)
+            return sessions
+        except Exception as e:
+            logger.error(f"Failed to list sessions: {e}")
+            return []
     
     async def get_user_context(self, user_id: str) -> Optional[str]:
         """
@@ -376,7 +422,10 @@ class RedisMemoryStore:
         
         # Add last conversation summary
         if profile.get("last_summary"):
-            parts.append(f"Previous conversation: {profile['last_summary']}")
+            summary = profile['last_summary']
+            if len(summary) > 150:
+                summary = summary[:147] + "..."
+            parts.append(f"Previous conversation: {summary}")
         
         # Add preferences
         prefs = profile.get("preferences", {})
@@ -417,6 +466,174 @@ class RedisMemoryStore:
         except Exception as e:
             logger.error(f"Failed to get recent sessions: {e}")
             return []
+    
+    # --- USER AUTHENTICATION & MANAGEMENT ---
+
+    async def save_user(self, username: str, password_plain: str, role: str = "user", approved: bool = False) -> bool:
+        """Save a new user to Redis."""
+        if not await self.ensure_connected():
+            return False
+        
+        try:
+            user_key = self._key("auth", "user", username)
+            user_data = {
+                "username": username,
+                "password_hash": hash_password(password_plain),
+                "role": role,
+                "approved": approved,
+                "created_at": datetime.now().isoformat()
+            }
+            await self._client.set(user_key, json.dumps(user_data))
+            
+            if not approved:
+                await self._client.sadd(self._key("auth", "pending_admins"), username)
+                
+            return True
+        except Exception as e:
+            logger.error(f"Failed to save user {username}: {e}")
+            return False
+
+    async def get_user_auth(self, username: str) -> Optional[Dict[str, Any]]:
+        """Retrieve user authentication data."""
+        if not await self.ensure_connected():
+            return None
+        
+        try:
+            user_key = self._key("auth", "user", username)
+            data = await self._client.get(user_key)
+            if not data:
+                return None
+            return json.loads(data)
+        except Exception as e:
+            logger.error(f"Failed to get user {username}: {e}")
+            return None
+
+    async def update_user_email(self, username: str, email: str) -> bool:
+        """Update an admin's notification email."""
+        if not await self.ensure_connected(): return False
+        try:
+            user_data = await self.get_user_auth(username)
+            if not user_data: return False
+            user_data["email"] = email
+            await self._client.set(self._key("auth", "user", username), json.dumps(user_data))
+            return True
+        except Exception:
+            return False
+
+    async def get_all_admin_emails(self) -> List[str]:
+        """Get a list of emails for all approved admins."""
+        admins = await self.list_all_admins()
+        return [a["email"] for a in admins if a.get("email")]
+
+    async def list_pending_approvals(self) -> List[str]:
+        """List all users waiting for admin approval."""
+        if not await self.ensure_connected():
+            return []
+        try:
+            return list(await self._client.smembers(self._key("auth", "pending_admins")))
+        except Exception:
+            return []
+
+    async def approve_user(self, username: str) -> bool:
+        """Approve a pending admin user."""
+        if not await self.ensure_connected():
+            return False
+        try:
+            user_data = await self.get_user_auth(username)
+            if not user_data:
+                return False
+            
+            user_data["approved"] = True
+            await self._client.set(self._key("auth", "user", username), json.dumps(user_data))
+            await self._client.srem(self._key("auth", "pending_admins"), username)
+            return True
+        except Exception as e:
+            logger.error(f"Failed to approve user {username}: {e}")
+            return False
+
+    async def list_all_admins(self) -> List[Dict[str, Any]]:
+        """List all approved administrators."""
+        if not await self.ensure_connected():
+            return []
+        try:
+            pattern = self._key("auth", "user", "*")
+            keys = await self._client.keys(pattern)
+            admins = []
+            for k in keys:
+                data = await self._client.get(k)
+                if data:
+                    user = json.loads(data)
+                    if user.get("role") == "admin" and user.get("approved"):
+                        admins.append(user)
+            return admins
+        except Exception:
+            return []
+
+    # --- ANALYTICS & MONITORING ---
+
+    async def update_user_activity(self, user_id: str, action: str = "call"):
+        """Update last seen and call counts for a phone user."""
+        if not await self.ensure_connected(): return
+        try:
+            profile = await self.load_user_profile(user_id) or {"user_id": user_id, "calls": 0}
+            profile["last_seen"] = datetime.now().isoformat()
+            if action == "call":
+                profile["calls"] = profile.get("calls", 0) + 1
+            
+            await self.save_user_profile(user_id, profile)
+        except Exception:
+            pass
+
+    async def get_system_stats(self) -> Dict[str, Any]:
+        """Get high-level stats for the admin dashboard."""
+        if not await self.ensure_connected(): return {}
+        try:
+            # 1. Admin counts
+            admin_keys = await self._client.keys(self._key("auth", "user", "*"))
+            admin_data = [json.loads(await self._client.get(k)) for k in admin_keys]
+            total_admins = len([u for u in admin_data if u.get("role") == "admin"])
+            pending_admins = len(await self._client.smembers(self._key("auth", "pending_admins")))
+            
+            # 2. User counts (from profiles)
+            user_keys = await self._client.keys(self._key("user", "*", "profile"))
+            users = []
+            for k in user_keys:
+                d = await self._client.get(k)
+                if d: users.append(json.loads(d))
+            
+            now = datetime.now()
+            active_limit = timedelta(days=7)
+            
+            active_users = []
+            inactive_users = []
+            excessive_users = []
+            
+            for u in users:
+                last_seen_str = u.get("last_seen")
+                if not last_seen_str:
+                    inactive_users.append(u)
+                    continue
+                    
+                last_seen = datetime.fromisoformat(last_seen_str)
+                if now - last_seen < active_limit:
+                    active_users.append(u)
+                    if u.get("calls", 0) > 50: # Threshold for 'excessive'
+                        excessive_users.append(u)
+                else:
+                    inactive_users.append(u)
+
+            return {
+                "total_admins": total_admins,
+                "pending_admins": pending_admins,
+                "total_users": len(users),
+                "active_users": len(active_users),
+                "inactive_users": len(inactive_users),
+                "excessive_users": len(excessive_users),
+                "db_size_kb": await self._client.info("memory") or 0
+            }
+        except Exception as e:
+            logger.error(f"Failed to get system stats: {e}")
+            return {}
     
     # --- SERIALIZATION HELPERS ---
     

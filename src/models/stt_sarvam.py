@@ -8,7 +8,7 @@ import io
 import asyncio
 import requests
 import numpy as np
-import scipy.io.wavfile as wavfile
+import wave
 from src.utils.logger import setup_logging
 from src.utils.exceptions import ModelLoadError
 
@@ -30,9 +30,14 @@ class SarvamSTT:
         sample_rate, audio_data = audio
         
         try:
-            # Convert numpy array to WAV bytes
+            # Convert numpy array to WAV bytes using standard wave library
             buffer = io.BytesIO()
-            wavfile.write(buffer, sample_rate, audio_data)
+            with wave.open(buffer, 'wb') as wf:
+                wf.setnchannels(1)
+                wf.setsampwidth(2) # 16-bit PCM
+                wf.setframerate(sample_rate)
+                wf.writeframes(audio_data.tobytes())
+            
             buffer.seek(0)
             
             # Call Sarvam API
@@ -42,7 +47,7 @@ class SarvamSTT:
             # Use run_in_executor for sync requests call
             response = await asyncio.get_event_loop().run_in_executor(
                 None, 
-                lambda: requests.post(self.url, files=files, headers=headers)
+                lambda: requests.post(self.url, files=files, headers=headers, timeout=10)
             )
             
             if response.status_code == 200:
@@ -67,3 +72,4 @@ def load_stt_model():
         return load_groq_stt_model()
         
     return SarvamSTT(api_key)
+

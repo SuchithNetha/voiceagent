@@ -163,7 +163,7 @@ class ContextWindowManager:
         
         # Work backwards from most recent
         for turn in reversed(session.turns[-self.config.max_turns:]):
-            role = "User" if turn.role == "user" else "Sarah"
+            role = "User" if turn.role == "user" else "Arya"
             line = f"{role}: {turn.content}"
             line_tokens = self._estimate_tokens(line)
             

@@ -18,14 +18,14 @@ class EdgeTTSWrapper:
     Sarah's voice using Edge-TTS API (Free, high-quality, 0MB local RAM).
     """
     def __init__(self):
-        # Using a warm, natural SoniaNeural voice (British English - professional real estate tone)
-        self.voice = "en-GB-SoniaNeural" 
+        # Using a modern, natural AvaNeural voice (US English - perfect for an international real estate agent)
+        self.voice = "en-US-AvaNeural" 
         logger.info(f"🔊 EdgeTTS initialized with voice: {self.voice}")
 
     async def stream_tts(self, text: str):
         """
-        Convert text to speech and yield audio chunks.
-        Matches the interface expected by SarahAgent.
+        Convert text to speech and yield audio chunks with minimal latency.
+        Decodes audio chunks as they arrive from the Edge-TTS stream.
         """
         if not text:
             return
@@ -33,36 +33,36 @@ class EdgeTTSWrapper:
         try:
             communicate = edge_tts.Communicate(text, self.voice)
             
-            # Use a buffer to collect the MP3 stream from Edge-TTS
-            mp3_data = io.BytesIO()
+            # Initialize PyAV decoder for incremental decoding
+            codec = av.CodecContext.create('mp3', 'r')
+            resampler = av.AudioResampler(
+                format='s16',
+                layout='mono',
+                rate=16000,
+            )
+            
             async for chunk in communicate.stream():
                 if chunk["type"] == "audio":
-                    mp3_data.write(chunk["data"])
+                    # Feed chunk to codec and get frames
+                    packets = codec.parse(chunk["data"])
+                    for packet in packets:
+                        frames = codec.decode(packet)
+                        for frame in frames:
+                            resampled_frames = resampler.resample(frame)
+                            for f in resampled_frames:
+                                array = f.to_ndarray().reshape(-1)
+                                yield (16000, array.astype(np.int16))
             
-            mp3_data.seek(0)
-            
-            # Decode MP3 to 16kHz PCM using PyAV
-            try:
-                container = av.open(mp3_data)
-                stream = container.streams.audio[0]
-                resampler = av.AudioResampler(
-                    format='s16',
-                    layout='mono',
-                    rate=16000,
-                )
-                
-                for frame in container.decode(stream):
+            # Flush the codec
+            packets = codec.parse(b'')
+            for packet in packets:
+                frames = codec.decode(packet)
+                for frame in frames:
                     resampled_frames = resampler.resample(frame)
                     for f in resampled_frames:
-                        # Convert to numpy and yield
                         array = f.to_ndarray().reshape(-1)
-                        # FastRTC/Twilio Expects int16
                         yield (16000, array.astype(np.int16))
-                
-                container.close()
-            except Exception as e:
-                logger.error(f"Decoding error: {e}")
-            
+
         except Exception as e:
             logger.error(f"❌ EdgeTTS Streaming error: {e}")
 

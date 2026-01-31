@@ -13,7 +13,7 @@ Works with:
 """
 
 import asyncio
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from datetime import datetime
 from dataclasses import dataclass
 
@@ -21,6 +21,7 @@ from src.memory.models import SessionMemory, UserPreferences
 from src.memory.summarizer import MemorySummarizer
 from src.memory.context import ContextWindowManager
 from src.utils.logger import setup_logging
+from src.config import get_config
 
 logger = setup_logging("Memory-SessionManager")
 
@@ -372,15 +373,14 @@ class PersistentSessionManager:
     
     def get_user_greeting(self, context: UserContext) -> str:
         """Generate personalized greeting for user."""
-        if context.is_returning and context.greeting_context:
-            return (
-                f"Welcome back! I remember we were {context.greeting_context}. "
-                "How can I help you today?"
-            )
+        if context.is_returning:
+            # Warm, natural greeting for returning users
+            return "Hey there! Welcome back. It's so good to hear from you again. How can I help you continue your property search today?"
         else:
+            # Premium, inviting greeting for new users
             return (
-                "Hi there! I'm Sarah, your real estate assistant for Madrid. "
-                "What kind of property are you looking for?"
+                "Hi! This is Arya. I'm so excited to help you find your dream home in Madrid. "
+                "What kind of vibe are you looking for? A modern apartment, or something with a bit more history?"
             )
     
     async def get_returning_user_summary(self, session_id: str) -> Optional[str]:
@@ -390,6 +390,54 @@ class PersistentSessionManager:
             return None
         
         return await self._redis_store.get_user_context(user_id)
+
+    async def list_users(self) -> List[Dict[str, Any]]:
+        """List all users in the system."""
+        if not self._redis_store:
+            return []
+        return await self._redis_store.list_all_user_profiles()
+
+    async def list_historical_sessions(self, limit: int = 50) -> List[Dict[str, Any]]:
+        """List historical sessions from Redis."""
+        if not self._redis_store:
+            return []
+        return await self._redis_store.list_all_sessions(limit=limit)
+
+    # --- AUTHENTICATION ---
+    
+    async def create_user(self, username: str, password_plain: str, role: str = "user", approved: bool = False):
+        if not self._redis_store: return False
+        
+        # Check if this is the configured Super Admin
+        config = get_config()
+        if username == config.SUPER_ADMIN_USERNAME:
+            role = "super_admin"
+            approved = True
+            
+        return await self._redis_store.save_user(username, password_plain, role, approved)
+
+    async def authenticate_user(self, username: str, password_plain: str) -> Optional[Dict[str, Any]]:
+        if not self._redis_store: return None
+        from src.utils.auth import verify_password
+        user = await self._redis_store.get_user_auth(username)
+        if user and verify_password(password_plain, user["password_hash"]):
+            # HQ OVERRIDE: Only the designated Commander (Ghost) is permitted entry.
+            config = get_config()
+            if user.get("username") == config.SUPER_ADMIN_USERNAME:
+                user["role"] = "super_admin"
+                user["approved"] = True
+                return user
+            
+            return {"error": "Access Denied: High Command clearance required."}
+        return None
+
+    async def list_pending_admins(self):
+        if not self._redis_store: return []
+        return await self._redis_store.list_pending_approvals()
+
+    async def approve_admin(self, username: str):
+        if not self._redis_store: return False
+        return await self._redis_store.approve_user(username)
 
 
 # --- SINGLETON ---

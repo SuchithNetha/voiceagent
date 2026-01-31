@@ -86,7 +86,8 @@ class SynthesisError(SarahBaseException):
 
 # --- SEARCH/DATABASE ERRORS ---
 class SearchEngineError(SarahBaseException):
-    """Raised when the Superlinked search engine fails."""
+    """Raised when the ChromaDB search engine fails."""
+
     
     def __init__(self, message: str, original_error: Optional[Exception] = None):
         user_message = "I'm having trouble searching right now. Let me try again."

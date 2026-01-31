@@ -1,4 +1,3 @@
-from fastrtc import get_stt_model
 from src.utils.logger import setup_logging
 from src.utils.exceptions import ModelLoadError
 from src.models.stt_groq import load_groq_stt_model

@@ -280,7 +280,7 @@ class SessionMemory:
         # Add recent turns
         recent = self.get_recent_turns(max_turns)
         for turn in recent:
-            prefix = "User" if turn.role == "user" else "Sarah"
+            prefix = "User" if turn.role == "user" else "Arya"
             parts.append(f"{prefix}: {turn.content}")
         
         return "\n".join(parts)
