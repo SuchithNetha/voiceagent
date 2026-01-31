@@ -7,6 +7,9 @@ import os
 import asyncio
 import numpy as np
 import google.generativeai as genai
+import warnings
+# Suppress the deprecation warning for google-generativeai
+warnings.filterwarnings("ignore", category=FutureWarning, module="google.generativeai")
 from typing import List, Optional, Union
 from src.utils.logger import setup_logging
 from src.config import get_config
