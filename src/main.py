@@ -181,6 +181,11 @@ class AryaAgent:
         logger.info("=" * 50)
         logger.info("✅ ARYA IS READY!")
         logger.info("=" * 50)
+        
+        import gc
+        gc.collect()  # Reclaim memory after heavy imports and setup
+        logger.info("🧹 Garbage collection complete (Clean Start)")
+        
         return True
     
     async def initialize_async(self) -> bool:
@@ -582,13 +587,8 @@ async def main_async():
         
         app_config = get_config()
 
-        # --- PORT GUARD: Check if port 7860 is already busy ---
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            if s.connect_ex(('127.0.0.1', app_config.PORT)) == 0:
-                logger.critical(f"❌ PORT CONFLICT: Port {app_config.PORT} is already busy!")
-                logger.critical(f"👉 TIP: You probably have another version of Arya running in another terminal.")
-                logger.critical(f"👉 FIX: Close all other terminals or press Ctrl+C in them, then try again.")
-                sys.exit(1)
+        from src.telephony import create_telephony_app, make_outbound_call
+        app_config = get_config()
 
         app = create_telephony_app(arya)
         

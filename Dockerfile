@@ -1,11 +1,12 @@
-# Production Dockerfile for Sarah Voice Agent
+# Production Dockerfile for Arya Voice Agent
+# Optimized for Render.com deployment
 FROM python:3.11-slim
 
-# Install system dependencies for audio processing
-RUN apt-get update && apt-get install -y \
-    build-essential \
+# Install minimal system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     libsndfile1 \
+    && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -20,14 +21,14 @@ COPY . .
 # Create data directory if it doesn't exist
 RUN mkdir -p data
 
-# Expose the default port (7860 is standard for Hugging Face)
-EXPOSE 7860
-
-# Metadata
+# Environment variables for production
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
-ENV PORT=7860
 
-# Default command: Start Sarah with telephony support
-# This starts the FastAPI server which handles the Twilio Webhooks
-CMD ["python", "src/main.py", "--phone"]
+# Render provides PORT dynamically, default to 10000
+ENV PORT=10000
+EXPOSE 10000
+
+# Start with uvicorn directly for better control
+# Use --host 0.0.0.0 to bind to all interfaces (required for Render)
+CMD ["sh", "-c", "python -m src.main --phone"]

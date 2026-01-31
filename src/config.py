@@ -60,14 +60,14 @@ class AppConfig:
     
     # --- Server ---
     HOST: str = os.getenv("HOST", "0.0.0.0")  # Bind to all interfaces for Cloud/Docker
-    PORT: int = int(os.getenv("PORT", "7860")) # Cloud platforms provide a dynamic PORT
+    PORT: int = int(os.getenv("PORT", "10000")) # Render usually provides PORT
     DEBUG: bool = os.getenv("DEBUG", "false").lower() == "true"
     
     # --- Twilio (Telephony) ---
     TWILIO_ACCOUNT_SID: Optional[str] = None
     TWILIO_AUTH_TOKEN: Optional[str] = None
     TWILIO_PHONE_NUMBER: Optional[str] = None
-    SERVER_URL: str = "http://127.0.0.1:7860"
+    SERVER_URL: str = os.getenv("SERVER_URL") or os.getenv("RENDER_EXTERNAL_URL") or "http://127.0.0.1:10000"
     
     # --- Audio/VAD Settings ---
     # Optimized for 8kHz μ-law from Twilio (limited dynamic range)

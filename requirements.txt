@@ -6,7 +6,7 @@ fastapi>=0.115.0
 uvicorn>=0.30.0
 
 # AI/ML (Cloud-based - no heavy local models)
-langchain>=0.3.0
+langchain-core>=0.3.0
 langchain-groq>=0.2.0
 langgraph>=0.2.0
 

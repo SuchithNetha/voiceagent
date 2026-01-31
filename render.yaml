@@ -1,0 +1,31 @@
+# Render.com deployment configuration
+# https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: arya-voice-agent
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter  # Requires paid plan for 512MB+ RAM
+    envVars:
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GEM_API_KEY
+        sync: false
+      - key: SARVAM_API_KEY
+        sync: false
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_PHONE_NUMBER
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: SUPER_ADMIN_USERNAME
+        sync: false
+      - key: SUPER_ADMIN_PASSWORD
+        sync: false
+      - key: SERVER_URL
+        sync: false
+    healthCheckPath: /health
