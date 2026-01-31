@@ -67,7 +67,7 @@ class AppConfig:
     TWILIO_ACCOUNT_SID: Optional[str] = None
     TWILIO_AUTH_TOKEN: Optional[str] = None
     TWILIO_PHONE_NUMBER: Optional[str] = None
-    SERVER_URL: str = os.getenv("SERVER_URL") or os.getenv("RENDER_EXTERNAL_URL") or "http://127.0.0.1:10000"
+    SERVER_URL: str = None  # Resolved in __post_init__
     
     # --- Audio/VAD Settings ---
     # Optimized for 8kHz μ-law from Twilio (limited dynamic range)
@@ -94,6 +94,20 @@ class AppConfig:
     SEARCH_RESULT_LIMIT: int = 3             # Default number of results
     
     def __post_init__(self):
+        # Resolve SERVER_URL logic
+        env_url = os.getenv("SERVER_URL", "")
+        render_url = os.getenv("RENDER_EXTERNAL_URL", "")
+        
+        # If SERVER_URL is set but looks local, and we have a Render URL, use Render's
+        if ("localhost" in env_url or "127.0.0.1" in env_url) and render_url:
+            self.SERVER_URL = render_url
+        elif env_url:
+            self.SERVER_URL = env_url
+        elif render_url:
+            self.SERVER_URL = render_url
+        else:
+            self.SERVER_URL = "http://127.0.0.1:10000"
+
         """Set computed paths after initialization."""
         if self.DATA_PATH is None:
             self.DATA_PATH = self.BASE_DIR / "data" / "properties.csv"

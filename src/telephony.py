@@ -62,6 +62,11 @@ async def sync_twilio_webhook():
         number_sid = numbers[0].sid
         voice_url = f"{config.SERVER_URL}/voice"
         
+        if "localhost" in config.SERVER_URL or "127.0.0.1" in config.SERVER_URL:
+            logger.warning("⚠️ Skipping Twilio Webhook Auto-Sync: SERVER_URL is local.")
+            logger.warning("   Please configure a public URL (ngrok or Render) to receive calls.")
+            return
+        
         # Update the Voice URL
         await loop.run_in_executor(
             None,
