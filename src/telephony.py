@@ -484,13 +484,17 @@ def create_telephony_app(agent):
         websocket_domain = base_url.replace('https://', '').replace('http://', '')
         stream_url = f"wss://{websocket_domain}/media-stream"
         
+        logger.info(f"🔗 SERVER_URL: {config.SERVER_URL}")
         logger.info(f"🔗 Twilio Stream URL: {stream_url}")
         
         connect = Connect()
         connect.stream(url=stream_url)
         response.append(connect)
         
-        return Response(content=str(response), media_type="application/xml")
+        twiml_response = str(response)
+        logger.info(f"📤 TwiML Response: {twiml_response[:500]}")
+        
+        return Response(content=twiml_response, media_type="application/xml")
 
     @app.websocket("/media-stream")
     async def handle_media_stream(websocket: WebSocket):

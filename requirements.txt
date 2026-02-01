@@ -3,7 +3,7 @@
 
 # Core Framework
 fastapi>=0.115.0
-uvicorn>=0.30.0
+uvicorn[standard]>=0.30.0  # [standard] includes websockets for Twilio media streams
 python-multipart>=0.0.9  # Required for form parsing (Twilio webhooks)
 
 # AI/ML (Cloud-based - no heavy local models)
@@ -33,6 +33,7 @@ redis[hiredis]>=5.0.8
 twilio>=9.3.0
 groq>=0.11.0
 python-dotenv>=1.0.1
+requests>=2.31.0  # For Sarvam API calls and ngrok detection
 
 # Optional: For WebRTC web mode (adds ~500MB)
 # pip install fastrtc gradio librosa numba
