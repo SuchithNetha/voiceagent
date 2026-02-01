@@ -4,6 +4,7 @@
 # Core Framework
 fastapi>=0.115.0
 uvicorn>=0.30.0
+python-multipart>=0.0.9  # Required for form parsing (Twilio webhooks)
 
 # AI/ML (Cloud-based - no heavy local models)
 langchain-core>=0.3.0
