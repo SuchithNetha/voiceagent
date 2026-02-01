@@ -95,16 +95,25 @@ class AppConfig:
     
     def __post_init__(self):
         # Resolve SERVER_URL logic
+        # Priority:
+        # 1. RENDER_EXTERNAL_URL (when deployed on Render)
+        # 2. SERVER_URL from .env (if it's a valid public URL, not ngrok on Render)
+        # 3. Auto-detect ngrok (when running locally)
+        # 4. Default to localhost
+        
         env_url = os.getenv("SERVER_URL", "")
         render_url = os.getenv("RENDER_EXTERNAL_URL", "")
         
-        # If SERVER_URL is set but looks local, and we have a Render URL, use Render's
-        if ("localhost" in env_url or "127.0.0.1" in env_url) and render_url:
+        # On Render: ALWAYS use RENDER_EXTERNAL_URL (ngrok doesn't work there!)
+        if render_url:
             self.SERVER_URL = render_url
-        elif env_url:
+        # Not on Render: Check if SERVER_URL is valid
+        elif env_url and "ngrok" not in env_url and "localhost" not in env_url and "127.0.0.1" not in env_url:
+            # SERVER_URL is a proper public URL (not ngrok, not localhost)
             self.SERVER_URL = env_url
-        elif render_url:
-            self.SERVER_URL = render_url
+        elif env_url and ("ngrok" in env_url or "localhost" in env_url or "127.0.0.1" in env_url):
+            # SERVER_URL is ngrok or localhost - will try to auto-detect in validate()
+            self.SERVER_URL = env_url
         else:
             self.SERVER_URL = "http://127.0.0.1:10000"
 
@@ -152,14 +161,38 @@ class AppConfig:
                 logger.critical(f"❌ {error}")
             raise ValueError(f"Configuration errors: {', '.join(errors)}")
         
-        # Try to auto-detect ngrok URL if we're on localhost
-        if "127.0.0.1" in self.SERVER_URL or "localhost" in self.SERVER_URL:
+        from src.utils.logger import setup_logging
+        logger = setup_logging("Config")
+        
+        # Check if we're on Render
+        render_url = os.getenv("RENDER_EXTERNAL_URL", "")
+        if render_url:
+            logger.info(f"☁️ Running on Render: {self.SERVER_URL}")
+            # No need to auto-detect ngrok on Render
+            return
+        
+        # Try to auto-detect ngrok URL if we're on localhost or have a stale ngrok URL
+        should_detect = (
+            "127.0.0.1" in self.SERVER_URL or 
+            "localhost" in self.SERVER_URL or
+            "ngrok" in self.SERVER_URL
+        )
+        
+        if should_detect:
             detected_url = self.auto_detect_server_url()
             if detected_url:
-                from src.utils.logger import setup_logging
-                logger = setup_logging("Config")
-                logger.info(f"🌐 Auto-detected ngrok URL: {detected_url}")
-                self.SERVER_URL = detected_url
+                if detected_url != self.SERVER_URL:
+                    logger.info(f"🌐 Auto-detected ngrok URL: {detected_url}")
+                    if "ngrok" in self.SERVER_URL and self.SERVER_URL != detected_url:
+                        logger.warning(f"⚠️ Replacing stale ngrok URL: {self.SERVER_URL}")
+                    self.SERVER_URL = detected_url
+                else:
+                    logger.info(f"✅ Ngrok URL confirmed: {detected_url}")
+            elif "ngrok" in self.SERVER_URL:
+                logger.warning(f"⚠️ Ngrok not detected locally, but SERVER_URL has ngrok: {self.SERVER_URL}")
+                logger.warning("   If running locally, make sure ngrok is running: ngrok http 10000")
+        
+        logger.info(f"🔗 Final SERVER_URL: {self.SERVER_URL}")
 
     def auto_detect_server_url(self) -> Optional[str]:
         """
