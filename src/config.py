@@ -71,11 +71,12 @@ class AppConfig:
     
     # --- Audio/VAD Settings ---
     # Optimized for 8kHz μ-law from Twilio (limited dynamic range)
+    # μ-law decoding typically results in lower RMS values than expected
     SILENCE_THRESHOLD_MS: int = 600          # Base silence threshold (responsive)
     SILENCE_THRESHOLD_MIN_MS: int = 400      # Minimum for fast talkers
     SILENCE_THRESHOLD_MAX_MS: int = 1000     # Maximum for deliberate speech
-    RMS_SILENCE_THRESHOLD: int = 400         # RMS level for silence detection
-    RMS_BARGE_IN_THRESHOLD: int = 450         # Reduced to match silence threshold for faster response
+    RMS_SILENCE_THRESHOLD: int = 150         # LOWERED: RMS level for silence detection (was 400)
+    RMS_BARGE_IN_THRESHOLD: int = 200        # LOWERED: For barge-in during TTS (was 450)
     BARGE_IN_CONFIRM_FRAMES: int = 3          # Balanced for phone lines
     BARGE_IN_GRACE_PERIOD_MS: int = 500       # Give agent a breath before allowing interruption
     

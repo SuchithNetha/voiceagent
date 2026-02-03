@@ -623,6 +623,7 @@ def create_telephony_app(agent):
                     barge_in_handler.stop_playback()
                     smart_barge_in.stop_monitoring()  # Disable monitoring
                     session_started = True
+                    logger.info("👂 Arya finished greeting - now LISTENING for user input")
                     # Store session start time for dashboard
                     _active_sessions[stream_sid] = {
                         "phone": caller_phone,
@@ -706,6 +707,7 @@ def create_telephony_app(agent):
                             barge_in_handler.stop_playback()
                             smart_barge_in.stop_monitoring()
                             audio_queue.task_done()
+                            logger.info("👂 Arya finished responding - now LISTENING for user input")
                     except asyncio.CancelledError:
                         break
                     except Exception as e:
@@ -733,6 +735,21 @@ def create_telephony_app(agent):
                     pcm_audio = audioop.ulaw2lin(base64.b64decode(packet['media']['payload']), 2)
                     
                     rms_analysis = rms_monitor.process_audio(pcm_audio)
+                    
+                    # Debug: Log RMS values periodically (every 50 packets = ~1 second)
+                    if hasattr(rms_monitor, '_debug_counter'):
+                        rms_monitor._debug_counter += 1
+                    else:
+                        rms_monitor._debug_counter = 0
+                    
+                    if rms_monitor._debug_counter % 50 == 0:
+                        logger.info(
+                            f"📊 RMS: {rms_analysis.current_rms:.0f} | "
+                            f"Speaking: {rms_analysis.is_speaking} | "
+                            f"Arya talking: {is_arya_speaking} | "
+                            f"Barge-in mode: {is_in_barge_in_mode} | "
+                            f"Buffer size: {len(audio_buffer)}"
+                        )
                     
                     # 1. BARGE-IN COLLECTION MODE: Continue collecting the user's new message
                     # This must have priority over is_arya_speaking to handle transitions correctly
@@ -803,6 +820,9 @@ def create_telephony_app(agent):
                         )
                         
                         if rms_analysis.is_speaking:
+                            # Log first detection of speech
+                            if len(audio_buffer) == 0:
+                                logger.info(f"🎤 User speech DETECTED! RMS={rms_analysis.current_rms:.0f}")
                             # If we have residual audio from a previous turn (e.g. user started talking just as Arya finished)
                             if barge_in_audio_buffer:
                                 audio_buffer.extend(barge_in_audio_buffer)
