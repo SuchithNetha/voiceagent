@@ -528,7 +528,7 @@ def create_telephony_app(agent):
             # Use WebRTC VAD for smart barge-in (filters coughs/sneezes)
             smart_barge_in = SmartBargeInDetector(
                 sample_rate=8000,  # Twilio sends 8kHz audio
-                aggressiveness=VADAggressiveness.LOW_BITRATE, # Changed from AGGRESSIVE to be more inclusive of phone audio
+                aggressiveness=VADAggressiveness.AGGRESSIVE, # Stricter filtering during speech
                 rms_threshold=config.RMS_BARGE_IN_THRESHOLD,
                 confirmation_frames=config.BARGE_IN_CONFIRM_FRAMES,
                 cooldown_ms=500,
