@@ -25,6 +25,7 @@ import warnings
 import argparse
 import threading
 import time
+import uvicorn
 from pathlib import Path
 from typing import AsyncGenerator, Tuple, Optional
 
@@ -677,10 +678,6 @@ async def main_async():
         import uvicorn
         import socket
         from src.config import get_config
-        from src.telephony import create_telephony_app, make_outbound_call
-        
-        app_config = get_config()
-
         from src.telephony import create_telephony_app, make_outbound_call
         app_config = get_config()
 
