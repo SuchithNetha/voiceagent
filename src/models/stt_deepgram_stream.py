@@ -9,12 +9,19 @@ import json
 import numpy as np
 from typing import Callable, Optional
 from src.utils.logger import setup_logging
-from deepgram import (
-    DeepgramClient,
-    LiveOptions,
-    LiveTranscriptionEvents,
-    DeepgramClientOptions
-)
+try:
+    from deepgram import (
+        DeepgramClient,
+        LiveOptions,
+        LiveTranscriptionEvents,
+        DeepgramClientOptions
+    )
+except ImportError:
+    # Fallback for SDK version variations where these aren't exported at top level
+    from deepgram import DeepgramClient, DeepgramClientOptions
+    from deepgram.clients.listen.v1.websocket.options import LiveOptions
+    from deepgram.clients.listen.v1.websocket.events import LiveTranscriptionEvents
+    logger.warning("⚠️ Deepgram imports required explicit sub-client paths")
 
 logger = setup_logging("Models-STT-DeepgramStream")
 

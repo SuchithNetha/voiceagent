@@ -56,6 +56,15 @@ class DeepgramSTT:
             logger.error("deepgram-sdk not installed. Run: pip install deepgram-sdk")
             raise
     
+    async def _get_options(self):
+        """Helper to get PrerecordedOptions with fallback."""
+        try:
+            from deepgram import PrerecordedOptions
+            return PrerecordedOptions
+        except ImportError:
+            from deepgram.clients.listen.v1.rest.options import PrerecordedOptions
+            return PrerecordedOptions
+
     @async_retry(tries=3, delay=0.2, backoff=2.0)
     async def stt(self, audio: Tuple[int, np.ndarray]) -> str:
         """
@@ -67,7 +76,7 @@ class DeepgramSTT:
         Returns:
             Transcription text (PRIMARY SPEAKER ONLY!)
         """
-        from deepgram import PrerecordedOptions
+        PrerecordedOptions = await self._get_options()
         
         sample_rate, audio_data = audio
         
@@ -119,7 +128,10 @@ class DeepgramSTT:
     
     def _transcribe_sync(self, audio_bytes: bytes, options):
         """Synchronous transcription call (run in thread)."""
-        from deepgram import FileSource
+        try:
+            from deepgram import FileSource
+        except ImportError:
+            from deepgram.clients.listen.v1.rest.source import FileSource
         
         payload: FileSource = {"buffer": audio_bytes}
         response = self.client.listen.rest.v("1").transcribe_file(payload, options)
@@ -222,7 +234,7 @@ class DeepgramSTT:
         Returns:
             Tuple of (transcription, confidence 0.0-1.0)
         """
-        from deepgram import PrerecordedOptions
+        PrerecordedOptions = await self._get_options()
         
         sample_rate, audio_data = audio
         

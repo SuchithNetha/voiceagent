@@ -25,11 +25,11 @@ from src.config import get_config
 from src.utils.logger import setup_logging
 from src.audio.rms_monitor import RMSMonitor
 from src.audio.adaptive_vad import AdaptiveSilenceDetector
-from src.audio.barge_in import BargeInHandler, ConversationState
+from src.audio.barge_in import BargeInHandler
 from src.audio.webrtc_vad import SmartBargeInDetector, WEBRTC_AVAILABLE, VADAggressiveness
 from src.dashboard_template import PUBLIC_DASHBOARD, ADMIN_DASHBOARD, LOGIN_HTML
 from src.dashboard_utils import get_recent_logs, get_current_config_map, update_env_file
-from src.utils.auth import get_current_user, login_required, admin_required, create_access_token
+from src.utils.auth import get_current_user, admin_required, create_access_token
 from src.utils.email_sender import send_admin_email
 from src.models.stt_deepgram_stream import load_deepgram_streamer
 

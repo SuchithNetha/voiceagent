@@ -9,14 +9,17 @@ A voice-enabled AI agent that can chat about Madrid real estate properties over 
 Visit the live deployment to try the voice agent!
 
 ## ✨ Features
-- **Cloud-First Architecture**: Minimal local footprint (~300MB).
-- **Voice Recognition**: Powered by Deepgram Nova-2 (default) or Groq Whisper.
-- **Voice Synthesis**: Powered by Edge-TTS (Ava US English).
-- **Semantic Search**: Numpy + Google Gemini Embeddings (lightweight, no ChromaDB).
-- **Natural Conversation**: Large Language Model on Groq (Llama 3.3 70B).
-- **Telephony**: Twilio integration for real phone calls.
-- **Persistent Memory**: Redis-backed user recognition and preferences.
-- **Admin Dashboard**: Web UI for monitoring calls and configuration.
+- **Cloud-First Architecture**: Minimal local footprint (<200MB).
+- **Voice Recognition**: Powered by **Deepgram Nova-2** with real-time **Speaker Diarization** (ignores background noise).
+- **Voice Synthesis**: Powered by **Edge-TTS** (Ava US English).
+- **Semantic Search**: Ultra-lightweight **NumPy-based Vector Search** with Google Gemini Embeddings.
+- **Natural Conversation**: Large Language Model on Groq (**Llama 3.1 8B** optimized for low latency).
+- **Telephony**: Native Twilio integration for high-concurrency phone calls.
+- **Persistent Memory**: Redis-backed session management with **Summarization Logic** to preserve context.
+- **Advanced Engineering**: 
+    - **Adaptive VAD**: Real-time silence detection that adapts to background noise floor.
+    - **Smart Barge-In**: WebRTC-based speech confirmation to handle interruptions naturally.
+    - **Proactive Recovery**: Automatic port clearing and API webhook synchronization.
 
 ## ⚠️ Requirements
 

@@ -33,7 +33,7 @@ redis[hiredis]>=5.0.8
 # Communication & SDKs
 twilio>=9.3.0
 groq>=0.11.0
-deepgram-sdk>=3.0.0  # Optional: For speaker diarization (set STT_MODEL=deepgram)
+deepgram-sdk==3.7.1  # Pinned to 3.7.1 to avoid ImportErrors with LiveOptions in v3.11+ environments
 python-dotenv>=1.0.1
 requests>=2.31.0  # For ngrok detection and external API calls
 
