@@ -675,9 +675,7 @@ async def main_async():
     
     if args.call:
         # 1. Start the Telephony Server in the background
-        import uvicorn
         import socket
-        from src.config import get_config
         from src.telephony import create_telephony_app, make_outbound_call
         app_config = get_config()
 
@@ -714,7 +712,6 @@ async def main_async():
         
     elif args.phone:
         # Start the Telephony Server (Twilio)
-        from src.config import get_config
         app_config = get_config()
         from src.telephony import create_telephony_app
         
