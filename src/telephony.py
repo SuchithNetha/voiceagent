@@ -181,7 +181,7 @@ def create_telephony_app(agent):
                     await agent.session_manager.create_user(uname, pwd, role="admin", approved=True)
                     logger.info(f"👤 Seeded Admin: {uname}")
 
-    @app.get("/health")
+    @app.api_route("/health", methods=["GET", "HEAD"])
     async def health_check_root():
         """Basic health check for monitoring and deployment."""
         return {
@@ -193,7 +193,7 @@ def create_telephony_app(agent):
 
     # --- PUBLIC ROUTES (No Auth Required) ---
 
-    @app.get("/", response_class=HTMLResponse)
+    @app.api_route("/", methods=["GET", "HEAD"], response_class=HTMLResponse)
     async def public_homepage():
         """Serve the public homepage with call initiator."""
         return PUBLIC_DASHBOARD

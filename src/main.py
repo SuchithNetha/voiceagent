@@ -720,23 +720,26 @@ async def main_async():
             import subprocess
             import os
             import signal
+            
+            # This utility is primarily for local development (Windows/Mac)
+            # In Docker/Render, the container is fresh and doesn't need port clearing.
+            if os.name != 'nt':
+                return
+                
             logger.info(f"🔍 Checking for lingering processes on port {port}...")
             try:
-                # Find the PID using netstat
+                # Find the PID using netstat (Windows specific logic)
                 output = subprocess.check_output(f"netstat -ano | findstr :{port}", shell=True).decode()
                 for line in output.splitlines():
                     if f":{port}" in line and "LISTENING" in line:
                         pid = line.strip().split()[-1]
                         if pid != "0":
                             logger.warning(f"⚠️ Killing process {pid} occupying port {port}...")
-                            if os.name == 'nt':
-                                subprocess.run(f"taskkill /F /PID {pid}", shell=True, capture_output=True)
-                            else:
-                                os.kill(int(pid), signal.SIGKILL)
+                            subprocess.run(f"taskkill /F /PID {pid}", shell=True, capture_output=True)
                             import time
                             time.sleep(1) # Give OS time to release resources
-            except subprocess.CalledProcessError:
-                pass # Port is clean
+            except (subprocess.CalledProcessError, FileNotFoundError):
+                pass # Port is clean or command missing
             except Exception as e:
                 logger.error(f"Error clearing port: {e}")
 
