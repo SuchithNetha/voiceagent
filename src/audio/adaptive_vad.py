@@ -42,9 +42,9 @@ class AdaptiveSilenceDetector:
     
     def __init__(
         self,
-        base_silence_ms: int = 600,      # Down from 800ms
-        min_silence_ms: int = 400,        # Minimum for fast talkers
-        max_silence_ms: int = 900,        # Maximum for deliberate speech
+        base_silence_ms: int = 800,      # Increased for slower talkers
+        min_silence_ms: int = 500,        # Minimum for fast talkers
+        max_silence_ms: int = 1200,       # Maximum for deliberate speech
         adaptation_window: int = 20       # Number of pauses to analyze
     ):
         """

@@ -451,6 +451,100 @@ class AryaAgent:
             logger.error(f"TTS error: {e}", exc_info=True)
             # Can't speak the error if TTS is broken, so just log it
     
+    async def handle_text_input(
+        self, 
+        user_text: str,
+        session_id: Optional[str] = None,
+        stop_event: Optional[asyncio.Event] = None
+    ) -> AsyncGenerator[Tuple[int, np.ndarray], None]:
+        """
+        Processes text input directly (skipping STT) and generates voice response.
+        Useful for Streaming STT where transcription happens concurrently.
+        """
+        session_id = session_id or self._generate_session_id()
+        request_logger = get_logger_with_context("Arya-TextHandler", request_id=session_id)
+        
+        if not self.is_ready:
+            async for chunk in self._speak_text(self.ERROR_MESSAGES["startup"]):
+                yield chunk
+            return
+            
+        if not user_text:
+            return
+
+        try:
+            request_logger.info(f"🗣️ User (via Stream): {user_text}")
+            self._last_user_texts[session_id] = user_text
+            
+            # Track user turn for memory
+            self.track_turn(session_id, "user", user_text)
+            
+            # Step 2: Get agent response
+            request_logger.info("🤔 Thinking...")
+            
+            # Start timer for pacing filler
+            response_task = asyncio.create_task(self._get_agent_response(
+                user_text, 
+                session_id, 
+                request_logger
+            ))
+            
+            # Wait with timeout to send a filler if it takes too long
+            try:
+                ai_response = await asyncio.wait_for(asyncio.shield(response_task), timeout=1.8)
+            except asyncio.TimeoutError:
+                # Send a filler to the user
+                import random
+                fillers = ["Hmm, let me check that for you...", "Interesting, let me see...", "One moment, searching...", "Hmm..."]
+                filler_text = random.choice(fillers)
+                request_logger.info(f"⏳ Sending pacing filler: {filler_text}")
+                async for chunk in self._speak_text(filler_text):
+                    yield chunk
+                
+                # Now wait for the real response
+                ai_response = await response_task
+            
+            # Step 3: Clean and speak response
+            clean_response = self._clean_response_for_speech(ai_response)
+            
+            if clean_response:
+                request_logger.info(f"🎙️ Arya: {clean_response}")
+                self._last_responses[session_id] = clean_response
+                
+                full_response_delivered = True
+                try:
+                    async for chunk in self._speak_text(clean_response):
+                        if stop_event and stop_event.is_set():
+                            request_logger.info("⚡ Audio streaming interrupted by stop_event")
+                            full_response_delivered = False
+                            break
+                        yield chunk
+                except Exception as e:
+                    request_logger.error(f"Error during audio streaming: {e}")
+                    full_response_delivered = False
+                
+                if full_response_delivered:
+                    self.track_turn(session_id, "assistant", clean_response)
+                else:
+                    self.track_turn(session_id, "assistant", "[Interrupted before completion]")
+                    try:
+                        await self.agent.aupdate_state(
+                            {"configurable": {"thread_id": session_id}},
+                            {"messages": [AIMessage(content="[System Note: Arya was interrupted here.]")]}
+                        )
+                    except: pass
+            else:
+                request_logger.warning("Empty response from agent")
+                
+        except AgentError as e:
+            request_logger.error(f"Agent error: {e}")
+            async for chunk in self._speak_text(self.ERROR_MESSAGES["agent"]):
+                yield chunk
+        except Exception as e:
+            request_logger.error(f"Unexpected error: {e}", exc_info=True)
+            async for chunk in self._speak_text(self.ERROR_MESSAGES["general"]):
+                yield chunk
+
     async def handle_voice_input(
         self, 
         audio: Tuple[int, np.ndarray],
@@ -623,10 +717,36 @@ async def main_async():
         
     elif args.phone:
         # Start the Telephony Server (Twilio)
-        import uvicorn
         from src.config import get_config
-        from src.telephony import create_telephony_app
         app_config = get_config()
+        from src.telephony import create_telephony_app
+        
+        # Proactive: Clear port if something is hanging from a previous run
+        def clear_port(port):
+            import subprocess
+            import os
+            import signal
+            logger.info(f"🔍 Checking for lingering processes on port {port}...")
+            try:
+                # Find the PID using netstat
+                output = subprocess.check_output(f"netstat -ano | findstr :{port}", shell=True).decode()
+                for line in output.splitlines():
+                    if f":{port}" in line and "LISTENING" in line:
+                        pid = line.strip().split()[-1]
+                        if pid != "0":
+                            logger.warning(f"⚠️ Killing process {pid} occupying port {port}...")
+                            if os.name == 'nt':
+                                subprocess.run(f"taskkill /F /PID {pid}", shell=True, capture_output=True)
+                            else:
+                                os.kill(int(pid), signal.SIGKILL)
+                            import time
+                            time.sleep(1) # Give OS time to release resources
+            except subprocess.CalledProcessError:
+                pass # Port is clean
+            except Exception as e:
+                logger.error(f"Error clearing port: {e}")
+
+        clear_port(app_config.PORT)
         
         app = create_telephony_app(arya)
         

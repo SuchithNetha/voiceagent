@@ -313,7 +313,7 @@ class RedisMemoryStore:
     async def save_user_profile(
         self, 
         user_id: str, 
-        preferences: UserPreferences,
+        preferences: Any,
         last_summary: Optional[str] = None
     ) -> bool:
         """Save user profile for long-term persistence."""
@@ -323,9 +323,12 @@ class RedisMemoryStore:
         try:
             profile_key = self._key("user", user_id, "profile")
             
+            # Handle both objects and dicts
+            pref_dict = preferences if isinstance(preferences, dict) else preferences.to_dict()
+            
             profile_data = {
                 "user_id": user_id,
-                "preferences": preferences.to_dict(),
+                "preferences": pref_dict,
                 "last_summary": last_summary,
                 "updated_at": datetime.now().isoformat(),
             }

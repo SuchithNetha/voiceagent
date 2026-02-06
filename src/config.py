@@ -42,9 +42,10 @@ class AppConfig:
     GROQ_API_KEY: str
     
     # --- Model Settings ---
+    LLM_PROVIDER: str = os.getenv("LLM_PROVIDER", "groq") # Default to Groq
     STT_MODEL: str = "base"
     TTS_MODEL: str = "kokoro"
-    LLM_MODEL: str = "llama-3.3-70b-versatile"
+    LLM_MODEL: str = os.getenv("LLM_MODEL", "llama-3.1-8b-instant")
     LLM_TEMPERATURE: float = 0.0
     
     # --- Paths ---
@@ -76,9 +77,9 @@ class AppConfig:
     SILENCE_THRESHOLD_MIN_MS: int = 400      # Minimum for fast talkers
     SILENCE_THRESHOLD_MAX_MS: int = 1000     # Maximum for deliberate speech
     RMS_SILENCE_THRESHOLD: int = 250         # INCREASED: To be less sensitive to static/background noise (was 150)
-    RMS_BARGE_IN_THRESHOLD: int = 450        # INCREASED: Require clearer, louder speech to trigger barge-in (was 200)
-    BARGE_IN_CONFIRM_FRAMES: int = 5          # INCREASED: Require 100ms of speech to confirm interruption (was 3)
-    BARGE_IN_GRACE_PERIOD_MS: int = 500       # Give agent a breath before allowing interruption
+    RMS_BARGE_IN_THRESHOLD: int = 600        # INCREASED: Require louder speech to trigger barge-in
+    BARGE_IN_CONFIRM_FRAMES: int = 8          # INCREASED: Require 160ms of speech to confirm interruption
+    BARGE_IN_GRACE_PERIOD_MS: int = 800       # INCREASED: Longer breath before allowing interruption
     
     # --- Memory Settings ---
     MEMORY_MAX_TURNS: int = 5                # Max conversation turns in context
@@ -226,9 +227,10 @@ class AppConfig:
             GROQ_API_KEY=os.getenv("GROQ_API_KEY", ""),
             
             # Optional with defaults
+            LLM_PROVIDER=os.getenv("LLM_PROVIDER", "groq"),
             STT_MODEL=os.getenv("STT_MODEL", "base"),
             TTS_MODEL=os.getenv("TTS_MODEL", "kokoro"),
-            LLM_MODEL=os.getenv("LLM_MODEL", "llama-3.3-70b-versatile"),
+            LLM_MODEL=os.getenv("LLM_MODEL", "llama-3.1-8b-instant"),
             LLM_TEMPERATURE=float(os.getenv("LLM_TEMPERATURE", "0.0")),
             
             LOG_LEVEL=os.getenv("LOG_LEVEL", "INFO"),

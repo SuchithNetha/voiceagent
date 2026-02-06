@@ -72,6 +72,8 @@ class RMSMonitor:
         # Rolling window
         self._rms_history: deque = deque(maxlen=window_size)
         self._peak_rms: float = 0.0
+        self._noise_floor: float = silence_threshold # Start with base
+        self._ambient_history: deque = deque(maxlen=window_size * 2) # Longer window for noise
         
         # State tracking
         self._is_user_speaking: bool = False
@@ -80,7 +82,7 @@ class RMSMonitor:
         
         # Frame thresholds for speech detection (hysteresis)
         self._speech_onset_frames: int = 2   # ~40ms to confirm speech start
-        self._speech_offset_frames: int = 10 # ~200ms to confirm speech end
+        self._speech_offset_frames: int = 15 # INCREASED: ~300ms to confirm speech end
         
         # Callbacks
         self._on_speech_start: List[Callable] = []
@@ -90,8 +92,31 @@ class RMSMonitor:
         logger.debug(
             f"RMS Monitor initialized: "
             f"silence_threshold={silence_threshold}, "
-            f"barge_in_threshold={barge_in_threshold}"
+            f"barge_in_threshold={barge_in_threshold} (Adaptive Noise Floor Ready)"
         )
+    
+    def _update_noise_floor(self, rms: float):
+        """Slowly adapt noise floor to environment."""
+        if not self._is_user_speaking:
+            self._ambient_history.append(rms)
+            if len(self._ambient_history) >= self._ambient_history.maxlen // 2:
+                # Noise floor is the 20th percentile of ambient sounds (ignores sudden quiet peaks)
+                sorted_ambient = sorted(list(self._ambient_history))
+                new_floor = sorted_ambient[len(sorted_ambient) // 5]
+                
+                # Slowly move towards new floor (dampening)
+                self._noise_floor = (self._noise_floor * 0.95) + (new_floor * 0.05)
+                
+                # Dynamically adjust thresholds relative to noise floor
+                # Silence threshold must be at least 1.5x noise floor
+                proposed_silence = max(self.silence_threshold, self._noise_floor * 1.5)
+                # Barge-in must be at least 2.5x noise floor or 1.2x silence
+                proposed_barge = max(self.barge_in_threshold, proposed_silence * 1.2, self._noise_floor * 2.5)
+                
+                if abs(proposed_silence - self.silence_threshold) > 50:
+                    logger.debug(f"🔉 Noise Floor: {self._noise_floor:.0f} -> Adjusting Silence: {proposed_silence:.0f}")
+                    self.silence_threshold = proposed_silence
+                    self.barge_in_threshold = proposed_barge
     
     def process_audio(self, pcm_audio: bytes) -> RMSAnalysis:
         """
@@ -112,6 +137,9 @@ class RMSMonitor:
         # Update history
         self._rms_history.append(rms)
         self._peak_rms = max(self._peak_rms, rms)
+        
+        # Adaptive noise tracking
+        self._update_noise_floor(rms)
         
         # Calculate averages
         avg_rms = sum(self._rms_history) / len(self._rms_history) if self._rms_history else 0.0

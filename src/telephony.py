@@ -31,6 +31,7 @@ from src.dashboard_template import PUBLIC_DASHBOARD, ADMIN_DASHBOARD, LOGIN_HTML
 from src.dashboard_utils import get_recent_logs, get_current_config_map, update_env_file
 from src.utils.auth import get_current_user, login_required, admin_required, create_access_token
 from src.utils.email_sender import send_admin_email
+from src.models.stt_deepgram_stream import load_deepgram_streamer
 
 logger = setup_logging("Telephony")
 config = get_config()
@@ -637,13 +638,12 @@ def create_telephony_app(agent):
                 nonlocal is_arya_speaking
                 while True:
                     try:
-                        audio_data = await audio_queue.get()
-                        stop_playback.clear()  # Reset stop flag for new turn
+                        input_data = await audio_queue.get()
+                        stop_playback.clear()
                         
-                        logger.info(f"🗣️ Processing user phrase...")
+                        logger.info(f"🗣️ Processing user input...")
                         if stream_sid in _active_sessions:
-                            _active_sessions[stream_sid]["last_text"] = "Processing phrase..."
-                        resampled_input, _ = audioop.ratecv(audio_data, 2, 1, 8000, 16000, None)
+                            _active_sessions[stream_sid]["last_text"] = "Thinking..."
                         
                         is_arya_speaking = True
                         barge_in_handler.start_playback()
@@ -653,50 +653,56 @@ def create_telephony_app(agent):
                         start_time = asyncio.get_event_loop().time()
                         
                         try:
+                            # Handle different input types
+                            if isinstance(input_data, str):
+                                # Streaming Text Input
+                                user_text = input_data
+                                handler_gen = agent.handle_text_input(
+                                    user_text,
+                                    session_id=stream_sid,
+                                    stop_event=stop_playback
+                                )
+                            else:
+                                # Raw Audio Input (Legacy/Fallback)
+                                resampled_input, _ = audioop.ratecv(input_data, 2, 1, 8000, 16000, None)
+                                handler_gen = agent.handle_voice_input(
+                                    (16000, np.frombuffer(resampled_input, dtype=np.int16)),
+                                    session_id=stream_sid,
+                                    stop_event=stop_playback
+                                )
+
                             if stream_sid in _active_sessions:
                                 user_text = agent.get_last_user_text(stream_sid)
                                 if user_text:
                                     _active_sessions[stream_sid]["last_text"] = f"User: {user_text}"
                                     _active_sessions[stream_sid]["history"].append({"role": "user", "content": user_text})
-                                    # Keep history lean (last 20 turns)
                                     if len(_active_sessions[stream_sid]["history"]) > 20:
                                         _active_sessions[stream_sid]["history"] = _active_sessions[stream_sid]["history"][-20:]
 
-                            async for chunk in agent.handle_voice_input(
-                                (16000, np.frombuffer(resampled_input, dtype=np.int16)),
-                                session_id=stream_sid,
-                                stop_event=stop_playback
-                            ):
+                            async for chunk in handler_gen:
                                 sample_rate, data = chunk
                                 
-                                # Update dashboard with AI response once it starts speaking
                                 if stream_sid in _active_sessions:
                                     ai_text = agent.get_last_response(stream_sid)
                                     if ai_text:
                                         _active_sessions[stream_sid]["last_text"] = f"Arya: {ai_text}"
-                                        # Only add if not same as last entry (to avoid duplicates during streaming)
                                         hist = _active_sessions[stream_sid]["history"]
                                         if not hist or hist[-1].get("content") != ai_text:
                                             hist.append({"role": "assistant", "content": ai_text})
                                 
-                                # Check for barge-in BEFORE sending each chunk
                                 if stop_playback.is_set():
-                                    logger.info("⚡ Interruption detected in speaker task. Stopping.")
-                                    is_arya_speaking = False # Force false immediately
-                                    # Clear Twilio's audio buffer
+                                    logger.info("⚡ Interruption detected. Stopping.")
+                                    is_arya_speaking = False
                                     try:
                                         await websocket.send_text(json.dumps({
                                             "event": "clear",
                                             "streamSid": stream_sid
                                         }))
-                                    except Exception:
-                                        pass
+                                    except: pass
                                     break
                                 
                                 await send_to_twilio(data, sample_rate)
                                 
-                                # Pacing: Stay ~250ms ahead of real-time to allow barge-in detection
-                                # without Arya cutting her state 'False' too early.
                                 total_samples += len(data)
                                 expected_time = total_samples / sample_rate
                                 elapsed = asyncio.get_event_loop().time() - start_time
@@ -707,7 +713,7 @@ def create_telephony_app(agent):
                             barge_in_handler.stop_playback()
                             smart_barge_in.stop_monitoring()
                             audio_queue.task_done()
-                            logger.info("👂 Arya finished responding - now LISTENING for user input")
+                            logger.info("👂 Arya finished - LISTENING")
                     except asyncio.CancelledError:
                         break
                     except Exception as e:
@@ -718,11 +724,55 @@ def create_telephony_app(agent):
             audio_buffer = bytearray()
             barge_in_audio_buffer = bytearray()  # Buffer for speech during barge-in
             is_in_barge_in_mode = False  # Track if we're collecting barge-in speech
+            total_received_samples = 0
+            current_stream_time = 0.0
+
+            # --- Streaming STT State ---
+            current_transcript = ""
+            current_partial = ""
+            last_turn_end_time = 0.0 # Stream-relative time in seconds
+            primary_speaker_id = None
+            
+            def on_dg_transcript(text: str, is_final: bool, speech_final: bool, start_time: float, speaker_id: int):
+                nonlocal current_transcript, current_partial, primary_speaker_id
+                
+                # Ignore transcripts that started before our last turn ended
+                if start_time < last_turn_end_time:
+                    return
+
+                # Diarization Filter: Identify the primary speaker in the first few words
+                # If we see a different speaker later, it's likely background noise
+                if primary_speaker_id is None and text.strip():
+                    primary_speaker_id = speaker_id
+                    logger.debug(f"👤 Identified primary speaker ID: {speaker_id}")
+                
+                # Filter out background speakers if we've identified the primary one
+                if primary_speaker_id is not None and speaker_id != primary_speaker_id:
+                    logger.debug(f"🔇 Ignoring background speech from Speaker {speaker_id}: {text}")
+                    return
+
+                if is_final:
+                    current_transcript += " " + text
+                    current_partial = "" # Clear partial once finalized
+                    logger.debug(f"📝 DG Stream Final: {text}")
+                else:
+                    current_partial = text # Track the latest partial
+                    logger.log(5, f"📝 DG Stream Partial: {text}")
+
+            dg_streamer = load_deepgram_streamer(on_dg_transcript)
+            if dg_streamer:
+                await dg_streamer.start()
 
             # Main Hearing Loop
             while True:
                 message = await websocket.receive_text()
                 packet = json.loads(message)
+                
+                # Update stream clock
+                if packet['event'] == 'media':
+                    payload_bytes = base64.b64decode(packet['media']['payload'])
+                    total_received_samples += len(payload_bytes) # mu-law is 1 byte per sample
+                    current_stream_time = total_received_samples / 8000.0
                 
                 if packet['event'] == 'start':
                     stream_sid = packet['start']['streamSid']
@@ -734,25 +784,13 @@ def create_telephony_app(agent):
                 elif packet['event'] == 'media':
                     pcm_audio = audioop.ulaw2lin(base64.b64decode(packet['media']['payload']), 2)
                     
+                    # Send to Deepgram immediately
+                    if dg_streamer and dg_streamer.is_active:
+                        asyncio.create_task(dg_streamer.send_audio(pcm_audio))
+
                     rms_analysis = rms_monitor.process_audio(pcm_audio)
                     
-                    # Debug: Log RMS values periodically (every 50 packets = ~1 second)
-                    if hasattr(rms_monitor, '_debug_counter'):
-                        rms_monitor._debug_counter += 1
-                    else:
-                        rms_monitor._debug_counter = 0
-                    
-                    if rms_monitor._debug_counter % 50 == 0:
-                        logger.info(
-                            f"📊 RMS: {rms_analysis.current_rms:.0f} | "
-                            f"Speaking: {rms_analysis.is_speaking} | "
-                            f"Arya talking: {is_arya_speaking} | "
-                            f"Barge-in mode: {is_in_barge_in_mode} | "
-                            f"Buffer size: {len(audio_buffer)}"
-                        )
-                    
-                    # 1. BARGE-IN COLLECTION MODE: Continue collecting the user's new message
-                    # This must have priority over is_arya_speaking to handle transitions correctly
+                    # 1. BARGE-IN COLLECTION MODE
                     if is_in_barge_in_mode:
                         vad_result = adaptive_vad.update(
                             rms=rms_analysis.current_rms,
@@ -760,84 +798,84 @@ def create_telephony_app(agent):
                             packet_duration_ms=PACKET_DURATION_MS
                         )
                         
-                        if rms_analysis.is_speaking:
-                            barge_in_audio_buffer.extend(pcm_audio)
-                        
-                        # When user finishes their barge-in speech, queue it
-                        if vad_result["pause_complete"] and len(barge_in_audio_buffer) > (MIN_AUDIO_MS * 16):
-                            logger.info("✨ Barge-in speech complete, queuing NEW context.")
-                            await audio_queue.put(bytes(barge_in_audio_buffer))
-                            barge_in_audio_buffer = bytearray()
+                        if vad_result["pause_complete"]:
+                            # Wait a tiny bit more for Deepgram to catch up with finalized results
+                            await asyncio.sleep(0.2) 
+                            
+                            # Use final transcript if available, otherwise fallback to partial
+                            final_text = current_transcript.strip()
+                            if not final_text and current_partial.strip():
+                                final_text = current_partial.strip()
+                                logger.info(f"✨ Recovered partial from barge-in: {final_text}")
+                            
+                            if final_text:
+                                logger.info(f"✨ Barge-in complete. Transcript: {final_text}")
+                                await audio_queue.put(final_text)
+                                # Update cutoff to NOW to avoid picking up the same audio again
+                                last_turn_end_time = current_stream_time
+                            else:
+                                logger.info("✨ Barge-in complete but no transcript.")
+                            
+                            current_transcript = ""
+                            current_partial = ""
                             is_in_barge_in_mode = False
                             adaptive_vad.reset()
                     
-                    # 2. BARGE-IN DETECTION: Only when Arya is speaking
+                    # 2. BARGE-IN DETECTION
                     elif is_arya_speaking:
                         is_barge_in, vad_info = smart_barge_in.check_barge_in(pcm_audio)
-
-                        # Ensure we ALWAYS buffer audio when someone is speaking, 
-                        # even if it's the packet that finally triggers the barge-in.
-                        if rms_analysis.is_speaking or is_barge_in:
-                            barge_in_audio_buffer.extend(pcm_audio)
-
                         if is_barge_in:
-                            logger.info(f"🚨 BARGE-IN! Method={vad_info.method}, RMS={vad_info.rms_level:.0f}")
-                            
-                            # 1. Signal to stop playback
+                            logger.info(f"🚨 BARGE-IN! RMS={vad_info.rms_level:.0f}")
                             stop_playback.set()
-                            is_arya_speaking = False # Force false immediately for the next packet
-                            
-                            # 2. Send clear to Twilio immediately from here too
+                            is_arya_speaking = False
                             try:
-                                await websocket.send_text(json.dumps({
-                                    "event": "clear",
-                                    "streamSid": stream_sid
-                                }))
-                            except Exception:
-                                pass
-
-                            # 3. Clear any pending items in the queue
+                                await websocket.send_text(json.dumps({"event": "clear", "streamSid": stream_sid}))
+                            except: pass
+                            
                             while not audio_queue.empty():
                                 try:
                                     audio_queue.get_nowait()
                                     audio_queue.task_done()
-                                except asyncio.QueueEmpty:
-                                    break
+                                except asyncio.QueueEmpty: break
                             
-                            # 4. Enter barge-in collection mode
                             is_in_barge_in_mode = True
-                            # Preserve the audio collected leading up to this point
-                            audio_buffer = bytearray()  # Clear normal buffer
+                            # Set cutoff to slightly BEFORE now (1s) to ensure we capture the start of the barge-in speech
+                            last_turn_end_time = max(0, current_stream_time - 1.0)
+                            current_transcript = "" 
+                            current_partial = ""
                             adaptive_vad.reset()
                     
-                    # 3. NORMAL MODE: Arya is silent, collect user speech
+                    # 3. NORMAL MODE
                     else:
-                        is_question = check_if_question(agent.get_last_response(stream_sid))
                         vad_result = adaptive_vad.update(
                             rms=rms_analysis.current_rms,
                             is_speech=rms_analysis.is_speaking,
                             packet_duration_ms=PACKET_DURATION_MS
                         )
                         
-                        if rms_analysis.is_speaking:
-                            # Log first detection of speech
-                            if len(audio_buffer) == 0:
-                                logger.info(f"🎤 User speech DETECTED! RMS={rms_analysis.current_rms:.0f}")
-                            # If we have residual audio from a previous turn (e.g. user started talking just as Arya finished)
-                            if barge_in_audio_buffer:
-                                audio_buffer.extend(barge_in_audio_buffer)
-                                barge_in_audio_buffer = bytearray()
-                            audio_buffer.extend(pcm_audio)
-                        
-                        if vad_result["pause_complete"] and len(audio_buffer) > (MIN_AUDIO_MS * 16):
-                            logger.info("✨ User phrase captured, queuing for agent.")
-                            await audio_queue.put(bytes(audio_buffer))
-                            audio_buffer = bytearray()
-                            adaptive_vad.reset()
-                            if hasattr(agent, 'last_response_text'): agent.last_response_text = None
+                        if vad_result["pause_complete"]:
+                            # Ensure Deepgram has had time to process the end of the sentence
+                            await asyncio.sleep(0.25) 
+                            
+                            # Use final transcript if available, otherwise fallback to partial
+                            final_text = current_transcript.strip()
+                            if not final_text and current_partial.strip():
+                                final_text = current_partial.strip()
+                                logger.info(f"✨ Recovered partial from normal turn: {final_text}")
+
+                            if final_text:
+                                logger.info(f"✨ User turn complete. Transcript: {final_text}")
+                                await audio_queue.put(final_text)
+                                
+                                # Mark the end of this turn to avoid double-processing
+                                last_turn_end_time = current_stream_time
+                                current_transcript = ""
+                                current_partial = ""
+                                adaptive_vad.reset()
                         
                 elif packet['event'] == 'stop':
                     logger.info("⏹️ Stream stopped")
+                    if dg_streamer: await dg_streamer.stop()
                     speaker.cancel()
                     break
         except Exception as e:
