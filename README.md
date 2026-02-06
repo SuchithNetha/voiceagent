@@ -1,6 +1,6 @@
 # Arya - Real Estate Voice Agent
 
-A voice-enabled AI agent that can chat about Madrid real estate properties over the phone. Built with **FastAPI**, **LangGraph**, **Groq**, **Sarvam AI**, and **Google Gemini**.
+A voice-enabled AI agent that can chat about Madrid real estate properties over the phone. Built with **FastAPI**, **LangGraph**, **Groq**, **Edge-TTS**, and **Google Gemini**.
 
 ## 🌐 Live Demo
 
@@ -10,8 +10,8 @@ Visit the live deployment to try the voice agent!
 
 ## ✨ Features
 - **Cloud-First Architecture**: Minimal local footprint (~300MB).
-- **Voice Recognition**: Powered by Sarvam AI or Groq Whisper.
-- **Voice Synthesis**: Powered by Sarvam AI (Bulbul v2) or Edge-TTS.
+- **Voice Recognition**: Powered by Deepgram Nova-2 (default) or Groq Whisper.
+- **Voice Synthesis**: Powered by Edge-TTS (Ava US English).
 - **Semantic Search**: Numpy + Google Gemini Embeddings (lightweight, no ChromaDB).
 - **Natural Conversation**: Large Language Model on Groq (Llama 3.3 70B).
 - **Telephony**: Twilio integration for real phone calls.
@@ -23,7 +23,7 @@ Visit the live deployment to try the voice agent!
 *   **Python 3.10 - 3.12**
 *   **API Keys**:
     - `GROQ_API_KEY` - STT and LLM
-    - `SARVAM_API_KEY` - Indian voice TTS/STT (optional)
+    - `DEEPGRAM_API_KEY` - Optional: For speaker diarization
     - `GEM_API_KEY` - Property search embeddings
     - `TWILIO_*` - Phone calls
 
@@ -52,7 +52,6 @@ Visit the live deployment to try the voice agent!
     ```env
     GROQ_API_KEY=your_groq_key
     GEM_API_KEY=your_gemini_key
-    SARVAM_API_KEY=your_sarvam_key
     
     TWILIO_ACCOUNT_SID=your_twilio_sid
     TWILIO_AUTH_TOKEN=your_twilio_token

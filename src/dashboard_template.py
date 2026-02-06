@@ -494,7 +494,6 @@ ADMIN_DASHBOARD = """
                         <div class="card-header"><h3>Environment Configuration</h3></div>
                         <form id="config-form" class="form-grid">
                             <div class="form-group"><label>Groq API Key</label><input type="password" name="GROQ_API_KEY"></div>
-                            <div class="form-group"><label>Sarvam TTS Key</label><input type="password" name="SARVAM_API_KEY"></div>
                             <div class="form-group"><label>Twilio Number</label><input type="text" name="TWILIO_PHONE_NUMBER"></div>
                             <div class="form-group"><label>Server URL</label><input type="text" name="SERVER_URL"></div>
                             <div style="grid-column: 1/-1;"><button type="submit">💾 Save Configuration</button></div>

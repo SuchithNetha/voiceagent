@@ -34,7 +34,7 @@ twilio>=9.3.0
 groq>=0.11.0
 deepgram-sdk>=3.0.0  # Optional: For speaker diarization (set STT_MODEL=deepgram)
 python-dotenv>=1.0.1
-requests>=2.31.0  # For Sarvam API calls and ngrok detection
+requests>=2.31.0  # For ngrok detection and external API calls
 
 # Optional: For WebRTC web mode (adds ~500MB)
 # pip install fastrtc gradio librosa numba
