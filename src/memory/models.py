@@ -184,6 +184,7 @@ class SessionMemory:
     current_intent: Optional[IntentType] = None
     pending_question: Optional[str] = None
     last_property_shown: Optional[str] = None
+    ended_gracefully: bool = False
     
     def add_turn(
         self, 
@@ -258,7 +259,8 @@ class SessionMemory:
             "last_summary_turn": self.last_summary_turn,
             "current_intent": self.current_intent.value if self.current_intent else None,
             "pending_question": self.pending_question,
-            "last_property_shown": self.last_property_shown
+            "last_property_shown": self.last_property_shown,
+            "ended_gracefully": self.ended_gracefully
         }
     
     def get_context_string(self, max_turns: int = 5) -> str:

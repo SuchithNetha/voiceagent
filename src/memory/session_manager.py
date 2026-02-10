@@ -34,6 +34,7 @@ class UserContext:
     greeting_context: Optional[str]  # For personalized greeting
     preferences: Optional[UserPreferences]
     last_session_summary: Optional[str]
+    was_interrupted: bool = False
 
 
 class PersistentSessionManager:
@@ -207,6 +208,7 @@ class PersistentSessionManager:
         greeting_context = None
         preferences = None
         last_summary = None
+        was_interrupted = False
         
         # Try to identify user via Redis
         if self._redis_store and phone_number:
@@ -220,6 +222,7 @@ class PersistentSessionManager:
                 if profile:
                     is_returning = True
                     last_summary = profile.get("last_summary")
+                    was_interrupted = not profile.get("last_session_graceful", True)
                     
                     # Reconstruct preferences
                     pref_data = profile.get("preferences", {})
@@ -262,7 +265,8 @@ class PersistentSessionManager:
             is_returning=is_returning,
             greeting_context=greeting_context,
             preferences=preferences,
-            last_session_summary=last_summary
+            last_session_summary=last_summary,
+            was_interrupted=was_interrupted
         )
     
     async def end_session(self, session_id: str) -> bool:
@@ -283,6 +287,9 @@ class PersistentSessionManager:
         user_id = self._session_users.get(session_id)
         
         try:
+            # Mark session as ended gracefully
+            session.ended_gracefully = True
+            
             # Generate summary if we have turns
             if self.summarize_on_end and len(session.turns) > 0:
                 summary = await self._summarizer.summarize_session(session)
@@ -302,7 +309,8 @@ class PersistentSessionManager:
                 await self._redis_store.save_user_profile(
                     user_id=user_id,
                     preferences=session.preferences,
-                    last_summary=session.running_summary
+                    last_summary=session.running_summary,
+                    last_session_graceful=session.ended_gracefully
                 )
                 
                 logger.info(f"💾 Session persisted for user {user_id[:8]}...")
@@ -374,6 +382,12 @@ class PersistentSessionManager:
     def get_user_greeting(self, context: UserContext) -> str:
         """Generate personalized greeting for user."""
         if context.is_returning:
+            if context.was_interrupted:
+                return (
+                    "Hey there! I'm so sorry, it seems our last call was cut short unexpectedly. "
+                    "I still remember everything we talked about, though! Should we pick up where we left off with your property search?"
+                )
+            
             # Warm, natural greeting for returning users
             return "Hey there! Welcome back. It's so good to hear from you again. How can I help you continue your property search today?"
         else:

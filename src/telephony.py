@@ -736,8 +736,9 @@ def create_telephony_app(agent):
             def on_dg_transcript(text: str, is_final: bool, speech_final: bool, start_time: float, speaker_id: int):
                 nonlocal current_transcript, current_partial, primary_speaker_id
                 
-                # Ignore transcripts that started before our last turn ended
-                if start_time < last_turn_end_time:
+                # Ignore transcripts that started long before our last turn ended
+                # Added 0.5s grace period to handle network latency/overlap
+                if start_time < (last_turn_end_time - 0.5):
                     return
 
                 # Diarization Filter: Identify the primary speaker in the first few words
@@ -746,10 +747,12 @@ def create_telephony_app(agent):
                     primary_speaker_id = speaker_id
                     logger.debug(f"👤 Identified primary speaker ID: {speaker_id}")
                 
-                # Filter out background speakers if we've identified the primary one
+                # Filter out background speakers ONLY if they have significant distance from the primary
                 if primary_speaker_id is not None and speaker_id != primary_speaker_id:
-                    logger.debug(f"🔇 Ignoring background speech from Speaker {speaker_id}: {text}")
-                    return
+                    # If the primary speaker hasn't spoken much yet, be cautious about filtering
+                    if len(current_transcript.split()) > 3:
+                        logger.debug(f"🔇 Ignoring background speech from Speaker {speaker_id}: {text}")
+                        return
 
                 if is_final:
                     current_transcript += " " + text

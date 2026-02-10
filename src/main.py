@@ -325,11 +325,18 @@ class AryaAgent:
             
             # 2. Build the messages with context injection
             messages = []
+            user_context = self._active_sessions.get(session_id)
+            
+            # If the user was interrupted last time, add a hidden system instruction
+            interruption_note = ""
+            if user_context and getattr(user_context, "was_interrupted", False):
+                interruption_note = "[SYSTEM NOTE: Our previous call with this user was disconnected unexpectedly. Please briefly acknowledge the technical hiccup if this is the start of the call.]\n"
+
             if full_context:
                 # Add context as a system-like separator to remind the LLM of who it's talking to
-                messages.append(("user", f"[SYSTEM CONTEXT: {full_context}]\n\nUser's message: {user_text}"))
+                messages.append(("user", f"{interruption_note}[SYSTEM CONTEXT: {full_context}]\n\nUser's message: {user_text}"))
             else:
-                messages.append(("user", user_text))
+                messages.append(("user", f"{interruption_note}{user_text}"))
 
             # 3. Ask the agent for a response
             result = await self.agent.ainvoke(

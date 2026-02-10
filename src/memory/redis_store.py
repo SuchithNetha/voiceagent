@@ -314,7 +314,8 @@ class RedisMemoryStore:
         self, 
         user_id: str, 
         preferences: Any,
-        last_summary: Optional[str] = None
+        last_summary: Optional[str] = None,
+        last_session_graceful: bool = True
     ) -> bool:
         """Save user profile for long-term persistence."""
         if not await self.ensure_connected():
@@ -330,6 +331,7 @@ class RedisMemoryStore:
                 "user_id": user_id,
                 "preferences": pref_dict,
                 "last_summary": last_summary,
+                "last_session_graceful": last_session_graceful,
                 "updated_at": datetime.now().isoformat(),
             }
             
@@ -707,6 +709,7 @@ class RedisMemoryStore:
             last_summary_turn=data.get("last_summary_turn", 0),
             current_intent=IntentType(data["current_intent"]) if data.get("current_intent") else None,
             last_property_shown=data.get("last_property_shown"),
+            ended_gracefully=data.get("ended_gracefully", False),
         )
     
     # --- HEALTH CHECK ---

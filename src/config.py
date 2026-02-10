@@ -76,10 +76,10 @@ class AppConfig:
     SILENCE_THRESHOLD_MS: int = 600          # Base silence threshold (responsive)
     SILENCE_THRESHOLD_MIN_MS: int = 400      # Minimum for fast talkers
     SILENCE_THRESHOLD_MAX_MS: int = 1000     # Maximum for deliberate speech
-    RMS_SILENCE_THRESHOLD: int = 250         # INCREASED: To be less sensitive to static/background noise (was 150)
-    RMS_BARGE_IN_THRESHOLD: int = 600        # INCREASED: Require louder speech to trigger barge-in
-    BARGE_IN_CONFIRM_FRAMES: int = 8          # INCREASED: Require 160ms of speech to confirm interruption
-    BARGE_IN_GRACE_PERIOD_MS: int = 800       # INCREASED: Longer breath before allowing interruption
+    RMS_SILENCE_THRESHOLD: int = 150         # MORE SENSITIVE: To detect quiet voices over telephone line
+    RMS_BARGE_IN_THRESHOLD: int = 450        # MORE SENSITIVE: Allow easier interruptions
+    BARGE_IN_CONFIRM_FRAMES: int = 6          # FASTER: Require 120ms of speech to confirm interruption
+    BARGE_IN_GRACE_PERIOD_MS: int = 600       # Responsive: Shorter breath before allowing interruption
     
     # --- Memory Settings ---
     MEMORY_MAX_TURNS: int = 5                # Max conversation turns in context

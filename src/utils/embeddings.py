@@ -28,7 +28,7 @@ else:
 class GeminiEmbedder:
     """Wrapper for Gemini Embedding API."""
     
-    def __init__(self, model: str = "models/embedding-001"):
+    def __init__(self, model: str = "models/text-embedding-04"):
         self.model = model
         logger.info(f"🧬 Gemini Embedder initialized with {model}")
 
